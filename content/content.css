@@ -1,0 +1,466 @@
+/* ── TrArXiv Content Script Styles ───────────────────────────────────────── */
+
+/* Buttons injected next to section headings */
+.trarxiv-btn-group {
+  display: inline-flex;
+  gap: 6px;
+  margin-left: 12px;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+.trarxiv-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: system-ui, sans-serif;
+  border: 1.5px solid currentColor;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
+.trarxiv-btn-translate {
+  color: #1a56db;
+  background: #eff6ff;
+  border-color: #93c5fd;
+}
+.trarxiv-btn-translate:hover {
+  background: #dbeafe;
+}
+
+.trarxiv-btn-explain {
+  color: #7c3aed;
+  background: #f5f3ff;
+  border-color: #c4b5fd;
+}
+.trarxiv-btn-explain:hover {
+  background: #ede9fe;
+}
+
+.trarxiv-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.trarxiv-btn-done {
+  opacity: 0.7;
+}
+
+/* English collapse toggle */
+.trarxiv-en-toggle {
+  display: inline-flex;
+  align-items: center;
+  font-size: 10.5px;
+  color: #94a3b8;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  margin-bottom: 4px;
+  border-radius: 3px;
+  transition: color 0.15s, background 0.15s;
+  font-family: system-ui, sans-serif;
+}
+.trarxiv-en-toggle:hover { color: #475569; background: #f1f5f9; }
+
+/* Figure analysis button */
+.trarxiv-fig-btn {
+  color: #059669;
+  background: #ecfdf5;
+  border-color: #6ee7b7;
+  margin-left: 8px;
+  font-size: 11px;
+}
+.trarxiv-fig-btn:hover { background: #d1fae5; }
+
+/* Figure analysis result */
+.trarxiv-fig-result {
+  margin-top: 10px;
+  padding: 12px 14px;
+  background: #f0fdf4;
+  border: 1px solid #86efac;
+  border-radius: 6px;
+  font-family: "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+}
+.trarxiv-fig-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #059669;
+  margin-bottom: 6px;
+  letter-spacing: 0.03em;
+}
+.trarxiv-fig-text {
+  font-size: 13px;
+  color: #1e293b;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+/* Spinner icon (pure CSS) */
+.trarxiv-spinner {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: trarxiv-spin 0.7s linear infinite;
+}
+@keyframes trarxiv-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Bulk translation bar ─────────────────────────────────────────────────── */
+.trarxiv-bulk-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 16px;
+  margin: 0 0 20px;
+  background: #f0f9ff;
+  border: 1.5px solid #bae6fd;
+  border-radius: 8px;
+  font-family: system-ui, sans-serif;
+}
+
+.trarxiv-bulk-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0369a1;
+  white-space: nowrap;
+}
+
+.trarxiv-bulk-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.trarxiv-bulk-stop {
+  padding: 3px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: system-ui, sans-serif;
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1.5px solid #fca5a5;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.trarxiv-bulk-stop:hover { background: #fee2e2; }
+
+.trarxiv-bulk-status {
+  font-size: 12px;
+  color: #475569;
+  font-style: italic;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Translation Block ─────────────────────────────────────────────────────── */
+.trarxiv-translation-block {
+  margin: 6px 0 14px 0;
+  padding: 10px 14px;
+  background: #f8fafc;
+  border-left: 3px solid #93c5fd;
+  border-radius: 0 6px 6px 0;
+  font-family: "Hiragino Sans", "Noto Sans JP", "BIZ UDPGothic", system-ui, sans-serif;
+}
+
+.trarxiv-translation-block[data-type="explain"] {
+  border-left-color: #c4b5fd;
+  background: #faf5ff;
+}
+
+.trarxiv-pair {
+  padding: 5px 6px;
+  border-radius: 4px;
+  transition: background 0.15s;
+  cursor: default;
+}
+.trarxiv-pair + .trarxiv-pair {
+  margin-top: 4px;
+}
+
+.trarxiv-pair:hover,
+.trarxiv-pair.trarxiv-active {
+  background: #dbeafe;
+}
+.trarxiv-translation-block[data-type="explain"] .trarxiv-pair:hover,
+.trarxiv-translation-block[data-type="explain"] .trarxiv-pair.trarxiv-active {
+  background: #ede9fe;
+}
+
+.trarxiv-en {
+  font-size: 13.5px;
+  color: #64748b;
+  line-height: 1.55;
+  margin-bottom: 2px;
+}
+
+.trarxiv-ja {
+  font-size: 15px;
+  color: #1e293b;
+  line-height: 1.7;
+  font-weight: 500;
+}
+
+/* ── Explain callout ──────────────────────────────────────────────────────── */
+.trarxiv-explain-text {
+  font-size: 13.5px;
+  color: #1e293b;
+  line-height: 1.8;
+  white-space: pre-wrap;
+  font-family: "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+}
+
+/* ── Error message ────────────────────────────────────────────────────────── */
+.trarxiv-error {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 10px;
+  padding: 3px 8px;
+  font-size: 12px;
+  color: #dc2626;
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  border-radius: 4px;
+}
+
+/* ── Progress label inside button ─────────────────────────────────────────── */
+.trarxiv-progress-label {
+  margin-left: 5px;
+  font-size: 10.5px;
+  font-weight: 500;
+  vertical-align: middle;
+}
+
+/* ── Badges (cache / elapsed time) ───────────────────────────────────────── */
+.trarxiv-cache-badge,
+.trarxiv-time-badge {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 1px 5px;
+  font-size: 10px;
+  font-family: system-ui, sans-serif;
+  border-radius: 3px;
+  vertical-align: middle;
+}
+.trarxiv-cache-badge {
+  color: #16a34a;
+  background: #dcfce7;
+}
+.trarxiv-time-badge {
+  color: #6b7280;
+  background: #f3f4f6;
+}
+
+/* ── Paper Briefing ──────────────────────────────────────────────────────── */
+.trarxiv-briefing-wrap {
+  display: block;
+  margin: 10px 0 4px;
+}
+
+.trarxiv-briefing-btn {
+  color: #b45309;
+  background: #fffbeb;
+  border-color: #fcd34d;
+}
+.trarxiv-briefing-btn:hover {
+  background: #fef3c7;
+}
+
+.trarxiv-briefing-card {
+  margin: 8px 0 20px;
+  padding: 14px 18px;
+  background: #fffbeb;
+  border: 1.5px solid #fcd34d;
+  border-radius: 8px;
+  font-family: "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+}
+
+.trarxiv-briefing-section {
+  margin-bottom: 10px;
+  line-height: 1.75;
+  font-size: 13.5px;
+  color: #1e293b;
+}
+.trarxiv-briefing-section:last-child {
+  margin-bottom: 0;
+}
+
+.trarxiv-briefing-label {
+  font-weight: 700;
+  color: #92400e;
+}
+
+.trarxiv-briefing-raw,
+.trarxiv-briefing-pre {
+  font-size: 13.5px;
+  color: #1e293b;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  margin: 0;
+}
+
+/* ── Author Research ─────────────────────────────────────────────────────── */
+.trarxiv-author-btn {
+  color: #0369a1;
+  background: #f0f9ff;
+  border-color: #7dd3fc;
+  font-size: 11px;
+  padding: 2px 7px;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+.trarxiv-author-btn:hover {
+  background: #e0f2fe;
+}
+
+.trarxiv-author-card {
+  margin: 4px 0 10px;
+  padding: 10px 14px;
+  background: #f0f9ff;
+  border-left: 3px solid #7dd3fc;
+  border-radius: 0 6px 6px 0;
+  font-size: 13px;
+  color: #1e293b;
+  line-height: 1.75;
+  white-space: pre-wrap;
+  font-family: "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+}
+
+.trarxiv-author-note {
+  display: block;
+  margin-top: 8px;
+  font-size: 11px;
+  color: #64748b;
+  font-style: italic;
+  white-space: normal;
+}
+
+/* ── Warning message ─────────────────────────────────────────────────────── */
+.trarxiv-warning {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 10px;
+  padding: 3px 8px;
+  font-size: 12px;
+  color: #92400e;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 4px;
+}
+
+/* ── Key unlock overlay ──────────────────────────────────────────────────── */
+.trarxiv-unlock-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 2147483647;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.trarxiv-unlock-box {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 28px 32px;
+  width: 380px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  font-family: "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+}
+
+.trarxiv-unlock-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 10px;
+  color: #1e293b;
+}
+
+.trarxiv-unlock-desc {
+  font-size: 13px;
+  color: #64748b;
+  margin-bottom: 14px;
+  line-height: 1.6;
+}
+
+.trarxiv-unlock-input {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 14px;
+  outline: none;
+  box-sizing: border-box;
+}
+.trarxiv-unlock-input:focus { border-color: #1a56db; }
+
+.trarxiv-unlock-toast {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-4px);
+  padding: 8px 18px;
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  opacity: 0;
+  transition: opacity 0.2s, transform 0.2s;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.trarxiv-unlock-toast.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.trarxiv-unlock-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.trarxiv-unlock-ok {
+  flex: 1;
+  padding: 9px;
+  background: #1a56db;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.trarxiv-unlock-ok:hover:not(:disabled) { background: #1e40af; }
+.trarxiv-unlock-ok:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.trarxiv-unlock-cancel {
+  flex: 1;
+  padding: 9px;
+  background: #f1f5f9;
+  color: #64748b;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.trarxiv-unlock-cancel:hover { background: #e2e8f0; }

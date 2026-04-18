@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TrArXiv 設定</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+<div class="layout">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-logo">TRar<span class="logo-x">X</span>iv</div>
+    <nav>
+      <a href="#" class="active" data-tab="llm"><span class="nav-icon">🤖</span>LLM設定</a>
+      <a href="#" data-tab="stats"><span class="nav-icon">📊</span>使用量・コスト</a>
+      <a href="#" data-tab="library"><span class="nav-icon">📚</span>論文ライブラリ</a>
+      <a href="#" data-tab="site-configs"><span class="nav-icon">🌐</span>サイト設定</a>
+      <a href="#" data-tab="cache"><span class="nav-icon">💾</span>キャッシュ</a>
+      <a href="#" data-tab="local"><span class="nav-icon">🖥</span>ローカルサーバー</a>
+    </nav>
+  </aside>
+
+  <!-- Main content -->
+  <main class="main">
+
+    <!-- ── LLM Settings ─────────────────────────────────────────────────── -->
+    <div class="tab-page active" id="tab-llm">
+      <h1>LLM設定</h1>
+
+      <!-- タスク別モデル設定 -->
+      <div class="card">
+        <h2 style="margin-top:0">タスク別モデル設定</h2>
+        <p style="font-size:12.5px;color:#64748b;margin-bottom:16px;line-height:1.6">
+          翻訳・解説・チャットでそれぞれ異なるプロバイダー／モデルを使用できます。<br>
+          翻訳は軽量モデルでコストを抑え、解説・チャットは高性能モデルで精度を上げるのが最適です。
+        </p>
+        <div id="task-assignment"><!-- JS で生成 --></div>
+        <div class="btn-row" style="margin-top:14px">
+          <button class="btn btn-primary" id="task-save">保存</button>
+          <span class="save-indicator" id="task-saved">✓ 保存しました</span>
+        </div>
+      </div>
+
+      <!-- プロバイダー設定 -->
+      <div class="card">
+        <h2 style="margin-top:0">プロバイダー設定 (APIキー・モデルリスト)</h2>
+        <div class="alert alert-info" style="margin-bottom:16px">
+          🔐 APIキーは保存時にパスワードで暗号化されます。次回Chromeを起動したとき、または「キーをロックする」後は、翻訳・解説・チャットの初回呼び出し時にパスワード入力が求められます。
+        </div>
+        <div class="provider-tabs">
+          <button class="provider-tab" data-provider="openai">OpenAI</button>
+          <button class="provider-tab" data-provider="anthropic">Anthropic</button>
+          <button class="provider-tab" data-provider="gemini">Google Gemini</button>
+          <button class="provider-tab" data-provider="openrouter">OpenRouter</button>
+          <button class="provider-tab" data-provider="local">ローカル</button>
+        </div>
+
+        <!-- OpenAI -->
+        <div class="provider-section" id="section-openai">
+          <div class="form-row">
+            <label>
+              APIキー
+              <span id="openai-key-lock" class="key-lock-badge" style="display:none">🔒 暗号化済み</span>
+            </label>
+            <div class="input-with-btn">
+              <input type="password" id="openai-apikey" placeholder="sk-…" autocomplete="off">
+              <button class="btn btn-secondary btn-sm" id="openai-toggle-pw" data-toggle-pw="openai-apikey">表示</button>
+              <button class="btn btn-secondary btn-sm" id="openai-unlock" style="display:none">解除して編集</button>
+            </div>
+          </div>
+          <div class="form-row">
+            <label>利用可能なモデル (カスタム追加)</label>
+            <div class="input-with-btn">
+              <input type="text" id="openai-custom-model" placeholder="例: gpt-4-turbo">
+              <button class="btn btn-secondary btn-sm" id="openai-add-model">追加</button>
+            </div>
+          </div>
+          <div class="model-list" id="openai-model-list"></div>
+          <div class="btn-row">
+            <button class="btn btn-primary" id="openai-save">保存</button>
+            <span class="save-indicator" id="openai-saved">✓ 保存しました</span>
+          </div>
+        </div>
+
+        <!-- Anthropic -->
+        <div class="provider-section" id="section-anthropic">
+          <div class="form-row">
+            <label>
+              APIキー
+              <span id="anthropic-key-lock" class="key-lock-badge" style="display:none">🔒 暗号化済み</span>
+            </label>
+            <div class="input-with-btn">
+              <input type="password" id="anthropic-apikey" placeholder="sk-ant-…" autocomplete="off">
+              <button class="btn btn-secondary btn-sm" id="anthropic-toggle-pw" data-toggle-pw="anthropic-apikey">表示</button>
+              <button class="btn btn-secondary btn-sm" id="anthropic-unlock" style="display:none">解除して編集</button>
+            </div>
+          </div>
+          <div class="form-row">
+            <label>利用可能なモデル (カスタム追加)</label>
+            <div class="input-with-btn">
+              <input type="text" id="anthropic-custom-model" placeholder="例: claude-opus-4-6">
+              <button class="btn btn-secondary btn-sm" id="anthropic-add-model">追加</button>
+            </div>
+          </div>
+          <div class="model-list" id="anthropic-model-list"></div>
+          <div class="btn-row">
+            <button class="btn btn-primary" id="anthropic-save">保存</button>
+            <span class="save-indicator" id="anthropic-saved">✓ 保存しました</span>
+          </div>
+        </div>
+
+        <!-- Gemini -->
+        <div class="provider-section" id="section-gemini">
+          <div class="alert alert-info">
+            Google AI Studio の APIキーで Gemini シリーズを利用できます。
+            <a href="https://aistudio.google.com" target="_blank">aistudio.google.com</a> で無料取得できます。
+          </div>
+          <div class="form-row">
+            <label>
+              APIキー
+              <span id="gemini-key-lock" class="key-lock-badge" style="display:none">🔒 暗号化済み</span>
+            </label>
+            <div class="input-with-btn">
+              <input type="password" id="gemini-apikey" placeholder="AIza…" autocomplete="off">
+              <button class="btn btn-secondary btn-sm" id="gemini-toggle-pw" data-toggle-pw="gemini-apikey">表示</button>
+              <button class="btn btn-secondary btn-sm" id="gemini-unlock" style="display:none">解除して編集</button>
+            </div>
+          </div>
+          <div class="form-row">
+            <label>利用可能なモデル (カスタム追加)</label>
+            <div class="input-with-btn">
+              <input type="text" id="gemini-custom-model" placeholder="例: gemini-2.5-pro-preview-05-06">
+              <button class="btn btn-secondary btn-sm" id="gemini-add-model">追加</button>
+            </div>
+          </div>
+          <div class="model-list" id="gemini-model-list"></div>
+          <div class="btn-row">
+            <button class="btn btn-primary" id="gemini-save">保存</button>
+            <span class="save-indicator" id="gemini-saved">✓ 保存しました</span>
+          </div>
+        </div>
+
+        <!-- OpenRouter -->
+        <div class="provider-section" id="section-openrouter">
+          <div class="alert alert-info">
+            OpenRouterを使うと、OpenAI・Anthropic・Mistral等100種類以上のモデルを
+            一つのAPIキーで利用できます。
+            <a href="https://openrouter.ai" target="_blank">openrouter.ai</a> で無料登録できます。<br>
+            利用可能なモデル一覧: <a href="https://openrouter.ai/models" target="_blank">openrouter.ai/models</a>
+          </div>
+          <div class="form-row">
+            <label>
+              APIキー
+              <span id="openrouter-key-lock" class="key-lock-badge" style="display:none">🔒 暗号化済み</span>
+            </label>
+            <div class="input-with-btn">
+              <input type="password" id="openrouter-apikey" placeholder="sk-or-…" autocomplete="off">
+              <button class="btn btn-secondary btn-sm" id="openrouter-toggle-pw" data-toggle-pw="openrouter-apikey">表示</button>
+              <button class="btn btn-secondary btn-sm" id="openrouter-unlock" style="display:none">解除して編集</button>
+            </div>
+          </div>
+          <div class="form-row">
+            <label>利用可能なモデル (カスタム追加)</label>
+            <div class="input-with-btn">
+              <input type="text" id="openrouter-custom-model" placeholder="例: mistralai/mistral-7b-instruct">
+              <button class="btn btn-secondary btn-sm" id="openrouter-add-model">追加</button>
+            </div>
+          </div>
+          <div class="model-list" id="openrouter-model-list"></div>
+          <div class="btn-row">
+            <button class="btn btn-primary" id="openrouter-save">保存</button>
+            <span class="save-indicator" id="openrouter-saved">✓ 保存しました</span>
+          </div>
+        </div>
+
+        <!-- Local -->
+        <div class="provider-section" id="section-local">
+          <div class="alert alert-info">
+            Ollama や LM Studio などのローカルサーバーに接続します。
+            セットアップ方法は「ローカルサーバー」タブを参照してください。
+            ローカルのAPIキーは暗号化されません。
+          </div>
+          <div class="form-row">
+            <label>サーバーURL (OpenAI互換エンドポイント)</label>
+            <div class="server-url-list" id="local-server-url-list"></div>
+            <div class="input-with-btn" style="margin-top:6px">
+              <input type="url" id="local-new-url" placeholder="http://localhost:PORT/v1">
+              <button class="btn btn-secondary btn-sm" id="local-add-url">追加</button>
+            </div>
+          </div>
+          <div class="form-row">
+            <label>利用可能なモデル (カスタム追加 / 接続テストで自動取得)</label>
+            <div class="input-with-btn">
+              <input type="text" id="local-custom-model" placeholder="例: llama3.2, gemma2:9b">
+              <button class="btn btn-secondary btn-sm" id="local-add-model">追加</button>
+            </div>
+          </div>
+          <div class="model-list" id="local-model-list"></div>
+          <div class="form-row">
+            <label>APIキー (不要な場合は "ollama" のまま)</label>
+            <input type="text" id="local-apikey" placeholder="ollama">
+          </div>
+          <div class="btn-row">
+            <button class="btn btn-secondary" id="local-test">接続テスト</button>
+            <button class="btn btn-primary" id="local-save">保存</button>
+            <span class="save-indicator" id="local-saved">✓ 保存しました</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Token limit -->
+      <div class="card">
+        <h2 style="margin-top:0">トークン上限 (過剰使用の予防)</h2>
+        <p style="font-size:12.5px;color:#64748b;margin-bottom:14px;line-height:1.6">
+          1論文あたりのトークン使用上限を設定します。翻訳前に推定使用量が上限を超える場合、
+          また翻訳中に上限に達した場合に確認ダイアログを表示します。
+        </p>
+        <div class="form-row" style="display:flex;align-items:center;gap:10px">
+          <label style="margin:0;white-space:nowrap">上限を有効にする</label>
+          <input type="checkbox" id="token-limit-enabled" style="width:auto">
+        </div>
+        <div class="form-row" id="token-limit-row" style="margin-top:10px">
+          <label>1論文あたりの上限 (tokens)</label>
+          <input type="number" id="token-limit-value" placeholder="例: 150000" min="1000" step="10000">
+          <p style="font-size:11.5px;color:#94a3b8;margin-top:4px">
+            目安: Abstract+3セクション翻訳 ≈ 15,000〜30,000 tokens
+          </p>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary btn-sm" id="token-limit-save">保存</button>
+          <span class="save-indicator" id="token-limit-saved">✓ 保存しました</span>
+        </div>
+      </div>
+
+      <!-- 表示設定 -->
+      <div class="card">
+        <h2 style="margin-top:0">表示設定</h2>
+
+        <div class="form-row">
+          <label>翻訳文字サイズ</label>
+          <select id="ui-font-size">
+            <option value="small">小（英文 11.5px / 和訳 13px）</option>
+            <option value="medium">中（英文 13.5px / 和訳 15px）</option>
+            <option value="large">大（英文 15px / 和訳 17px）</option>
+            <option value="xlarge">特大（英文 17px / 和訳 19px）</option>
+          </select>
+        </div>
+        <p style="font-size:11.5px;color:#94a3b8;margin-top:4px;margin-bottom:14px">
+          翻訳ブロック内の英文・和訳の文字サイズを設定します。ページをリロードすると反映されます。
+        </p>
+
+        <div class="form-row" style="display:flex;align-items:center;gap:10px">
+          <label style="margin:0">翻訳時に原文を折り畳む（デフォルト）</label>
+          <input type="checkbox" id="ui-collapse-english" style="width:auto">
+        </div>
+        <p style="font-size:11.5px;color:#94a3b8;margin-top:4px">
+          有効にすると、翻訳ブロックの原文は折り畳まれて表示されます。各ブロックのボタンで展開可能です。
+        </p>
+
+        <div class="btn-row">
+          <button class="btn btn-primary btn-sm" id="ui-collapse-english-save">保存</button>
+          <span class="save-indicator" id="ui-prefs-saved">✓ 保存しました</span>
+        </div>
+      </div>
+
+      <!-- ストレージ設定 -->
+      <div class="card">
+        <h2 style="margin-top:0">ストレージ設定</h2>
+        <p style="font-size:12.5px;color:#64748b;margin-bottom:14px;line-height:1.6">
+          設定の保存場所を選択します。ローカルはこのデバイスのみ、同期はChromeアカウントで複数デバイスに同期されます。<br>
+          同期を使う場合、暗号化されたAPIキーが他デバイスにも同期されます。キーは暗号化済みのため漏洩リスクは下げられますが、完全に安全とは言えません。
+        </p>
+        <div class="form-row">
+          <label>保存場所</label>
+          <select id="storage-type">
+            <option value="local">ローカル（このデバイスのみ）</option>
+            <option value="sync">同期（Chromeアカウントで同期）</option>
+          </select>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-primary btn-sm" id="storage-type-save">保存</button>
+          <span class="save-indicator" id="storage-type-saved">✓ 保存しました</span>
+        </div>
+      </div>
+
+      <!-- セキュリティ -->
+      <div class="card">
+        <h2 style="margin-top:0">セキュリティ</h2>
+        <p style="font-size:12.5px;color:#64748b;margin-bottom:14px;line-height:1.6">
+          APIキーはAES-256-GCMで暗号化されてストレージに保存されます。復号されたキーはChromeが起動している間のみメモリ上に保持され、閉じると消去されます。
+        </p>
+        <div class="btn-row">
+          <button class="btn btn-secondary btn-sm" id="lock-all-keys">🔒 キーをロックする</button>
+          <span class="save-indicator" id="lock-all-saved">✓ ロックしました</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Usage & Cost ─────────────────────────────────────────────────── -->
+    <div class="tab-page" id="tab-stats">
+      <h1>使用量・コスト</h1>
+      <div class="stat-subtabs">
+        <button class="stat-subtab active" data-subtab="usage">使用量</button>
+        <button class="stat-subtab" data-subtab="pricing">料金設定</button>
+      </div>
+
+      <!-- 使用量 -->
+      <div class="stat-subpage active" id="statpage-usage">
+        <div class="card">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+            <h2 style="margin:0">モデル別トークン使用量</h2>
+            <button class="btn btn-danger btn-sm" id="clear-stats">リセット</button>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>モデル</th>
+                <th>入力 tokens</th>
+                <th>出力 tokens</th>
+                <th>合計</th>
+                <th>推定コスト (USD)</th>
+              </tr>
+            </thead>
+            <tbody id="stats-tbody">
+              <tr><td colspan="5" style="text-align:center;color:#94a3b8;padding:20px">データなし</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 料金設定 -->
+      <div class="stat-subpage" id="statpage-pricing">
+        <div class="card">
+          <h2 style="margin-top:0">料金設定 (USD / 1Mトークン)</h2>
+          <p style="font-size:12.5px;color:#64748b;margin-bottom:14px;line-height:1.6">
+            デフォルト料金表を上書きできます。モデルは各プロバイダーに登録済みのものから選択してください。
+          </p>
+          <div id="pricing-list"></div>
+          <div class="btn-row">
+            <button class="btn btn-secondary btn-sm" id="pricing-add">+ 行を追加</button>
+            <button class="btn btn-primary btn-sm" id="pricing-save">保存</button>
+            <span class="save-indicator" id="pricing-saved">✓ 保存しました</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Library ──────────────────────────────────────────────────────── -->
+    <div class="tab-page" id="tab-library">
+      <h1>論文ライブラリ</h1>
+      <div class="card">
+        <p style="font-size:13px;color:#475569;margin-bottom:16px;line-height:1.6">
+          ArXivの論文ページを開くと自動的に登録されます。タグで管理・整理できます。
+        </p>
+        <div class="btn-row" style="margin-bottom:16px">
+          <button class="btn btn-secondary btn-sm" id="library-refresh">更新</button>
+          <button class="btn btn-danger btn-sm" id="library-clear-all">全削除</button>
+        </div>
+        <div id="library-list">
+          <div style="color:#94a3b8;padding:16px 0">「論文ライブラリ」タブを開くと読み込まれます。</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Site configs ───────────────────────────────────────────────────── -->
+    <div class="tab-page" id="tab-site-configs">
+      <h1>サイト設定</h1>
+      <div class="card">
+        <p style="font-size:13px;color:#475569;margin-bottom:16px;line-height:1.6">
+          ポップアップから未対応サイトを解析すると、そのサイトの論文構造がここに保存されます。<br>
+          次回から自動的にそのサイトのフォーマットを使用して翻訳・解説が利用できます。
+        </p>
+        <div class="btn-row" style="margin-bottom:16px">
+          <button class="btn btn-secondary btn-sm" id="site-configs-refresh">更新</button>
+        </div>
+        <div id="site-configs-list">
+          <div style="color:#94a3b8;padding:16px 0">「サイト設定」タブを開くと読み込まれます。</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Cache ───────────────────────────────────────────────────────── -->
+    <div class="tab-page" id="tab-cache">
+      <h1>キャッシュ管理</h1>
+      <div class="card">
+        <p style="font-size:13px;color:#475569;margin-bottom:16px;line-height:1.6">
+          同じ論文・同じセクションを再度開いた際、APIを呼ばずにキャッシュから
+          翻訳・解説を表示します。
+        </p>
+        <div class="stat-grid" id="cache-stats">
+          <div class="stat-box">
+            <div class="stat-value" id="cache-count">—</div>
+            <div class="stat-label">キャッシュ件数</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-value" id="cache-size">—</div>
+            <div class="stat-label">使用容量</div>
+          </div>
+        </div>
+        <div class="btn-row">
+          <button class="btn btn-secondary" id="refresh-cache">更新</button>
+          <button class="btn btn-danger" id="clear-cache">キャッシュをクリア</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Local Server Guide ─────────────────────────────────────────── -->
+    <div class="tab-page" id="tab-local">
+      <h1>ローカルサーバーのセットアップ</h1>
+
+      <div class="card">
+        <h2 style="margin-top:0">Ollama（推奨）</h2>
+        <p style="font-size:13px;color:#475569;margin-bottom:16px;line-height:1.6">
+          Ollama は macOS / Linux / Windows 対応の無料ローカルLLMランナーです。
+          OpenAI互換APIを提供します。
+        </p>
+        <div class="guide-steps">
+          <div class="guide-step">
+            <div class="step-num">1</div>
+            <div class="step-body">
+              <div class="step-title">Ollama をインストール</div>
+              <div class="step-desc">
+                <a href="https://ollama.com/download" target="_blank">ollama.com/download</a>
+                からOSに合ったインストーラーをダウンロードして実行してください。
+              </div>
+            </div>
+          </div>
+          <div class="guide-step">
+            <div class="step-num">2</div>
+            <div class="step-body">
+              <div class="step-title">モデルをダウンロード</div>
+              <div class="step-desc">
+                ターミナルで以下のコマンドを実行してください（例: Llama 3.2 3B）:
+              </div>
+              <pre>ollama pull llama3.2</pre>
+              <div class="step-desc">
+                他のおすすめモデル: <code>gemma2:9b</code>, <code>mistral</code>,
+                <code>phi4-mini</code>
+              </div>
+            </div>
+          </div>
+          <div class="guide-step">
+            <div class="step-num">3</div>
+            <div class="step-body">
+              <div class="step-title">Ollama を起動</div>
+              <div class="step-desc">
+                Ollama アプリを起動するか、ターミナルで:
+              </div>
+              <pre>ollama serve</pre>
+              <div class="step-desc">
+                起動後、<code>http://localhost:11434</code> でAPIが利用可能になります。
+              </div>
+            </div>
+          </div>
+          <div class="guide-step">
+            <div class="step-num">4</div>
+            <div class="step-body">
+              <div class="step-title">TrArXiv を設定</div>
+              <div class="step-desc">
+                「LLM設定」→「ローカル」タブで以下を設定してください：<br>
+                ・サーバーURL: <code>http://localhost:11434/v1</code><br>
+                ・モデル名: ダウンロードしたモデル名（例: <code>llama3.2</code>）<br>
+                ・APIキー: <code>ollama</code>（そのまま）
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top:0">LM Studio</h2>
+        <div class="guide-steps">
+          <div class="guide-step">
+            <div class="step-num">1</div>
+            <div class="step-body">
+              <div class="step-title">LM Studio をインストール</div>
+              <div class="step-desc">
+                <a href="https://lmstudio.ai" target="_blank">lmstudio.ai</a>
+                からダウンロードしてインストールします。
+              </div>
+            </div>
+          </div>
+          <div class="guide-step">
+            <div class="step-num">2</div>
+            <div class="step-body">
+              <div class="step-title">モデルを選択してサーバーを起動</div>
+              <div class="step-desc">
+                LM Studio の左パネルで「Local Server」を開き、モデルを選択して
+                「Start Server」をクリックします。
+              </div>
+            </div>
+          </div>
+          <div class="guide-step">
+            <div class="step-num">3</div>
+            <div class="step-body">
+              <div class="step-title">TrArXiv を設定</div>
+              <div class="step-desc">
+                「LLM設定」→「ローカル」タブで以下を設定:<br>
+                ・サーバーURL: <code>http://localhost:1234/v1</code><br>
+                ・モデル名: LM Studioで選択したモデル名<br>
+                ・APIキー: <code>lm-studio</code> または任意の文字列
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2 style="margin-top:0">注意事項</h2>
+        <div class="alert alert-warn">
+          Chrome拡張からローカルサーバーへのアクセスには、
+          サーバー側でCORSヘッダーの許可が必要です。<br><br>
+          Ollamaの場合、環境変数を設定してください:
+          <pre>OLLAMA_ORIGINS=chrome-extension://* ollama serve</pre>
+          macOSのLaunchAgentを使っている場合は、
+          <code>/etc/launchd.conf</code> または systemd サービスに
+          <code>Environment=OLLAMA_ORIGINS=chrome-extension://*</code> を追加してください。
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ── Password Modal ──────────────────────────────────────────────────── -->
+<div id="pw-modal" class="pw-modal-overlay" style="display:none">
+  <div class="pw-modal-box">
+    <h3 id="pw-modal-title">パスワードを入力</h3>
+    <p id="pw-modal-desc" class="pw-modal-desc"></p>
+    <input type="password" id="pw-modal-input" placeholder="パスワード（英数字）" autocomplete="off">
+    <div class="btn-row" style="margin-top:14px">
+      <button class="btn btn-primary" id="pw-modal-ok">OK</button>
+      <button class="btn btn-secondary" id="pw-modal-cancel">キャンセル</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="options.js"></script>
+</body>
+</html>

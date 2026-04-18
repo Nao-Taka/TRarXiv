@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TRarXiv</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <div class="header-title">TRarXiv</div>
+    <div class="header-paper" id="paper-title">—</div>
+  </div>
+  <div class="header-actions">
+    <button class="icon-btn" id="btn-clear" title="会話をクリア" style="display:none">🗑</button>
+    <button class="icon-btn" id="btn-options" title="設定を開く">⚙</button>
+  </div>
+</div>
+
+<!-- No tab / unrecognized error state -->
+<div class="no-paper" id="no-paper" style="display:none">
+  <div class="no-paper-icon">📄</div>
+  <p>ArXiv論文のHTMLページ<br>(<code>arxiv.org/html/…</code>)<br>を開いてください。</p>
+</div>
+
+<!-- Site analysis (non-arxiv pages) -->
+<div id="site-section" style="display:none">
+  <div class="site-info-bar">
+    <span class="site-domain-icon">🌐</span>
+    <span id="site-hostname-label" class="site-domain-name">—</span>
+  </div>
+  <div id="site-config-status" class="site-config-status"></div>
+  <div class="site-actions-row">
+    <button class="site-btn" id="btn-analyze-site">🔍 このサイトを解析</button>
+    <button class="site-btn site-btn-secondary" id="btn-reanalyze-site" style="display:none">🔄 再解析</button>
+  </div>
+  <div class="site-progress" id="site-progress" style="display:none">
+    <span class="site-spinner"></span>
+    <span id="site-progress-msg">解析中...</span>
+  </div>
+  <div class="site-result" id="site-result" style="display:none"></div>
+
+  <!-- Host permission banner -->
+  <div id="site-perm-banner" class="site-perm-banner" style="display:none">
+    <span>⚠ このサイトでの動作にはアクセス許可が必要です</span>
+    <button class="site-perm-btn" id="btn-grant-perm">許可する</button>
+  </div>
+
+  <!-- Refinement chat -->
+  <div id="site-refine-section" class="site-refine-section" style="display:none">
+    <div class="site-refine-label">✏ 解析結果を修正</div>
+    <textarea id="site-refine-input" class="site-refine-input"
+      placeholder="例: 段落が正しく取得できていない / 引用文献にもボタンが付いてしまう / Methodsセクションが認識されない" rows="3"></textarea>
+    <div class="site-refine-history" id="site-refine-history"></div>
+    <button class="site-btn" id="btn-refine-site">修正する</button>
+  </div>
+
+  <div class="site-note">
+    論文サイトを解析してセクション構造を学習します。<br>
+    同じドメインの他の論文にも自動で適用されます。
+  </div>
+</div>
+
+<!-- Chat messages -->
+<div class="messages" id="messages" style="display:none"></div>
+
+<!-- Input -->
+<div class="input-area" id="input-area" style="display:none">
+  <textarea id="input" rows="2" placeholder="論文について質問してください…" disabled></textarea>
+  <button class="send-btn" id="send-btn" disabled>送信</button>
+</div>
+
+<div class="footer">
+  <span id="model-name">—</span>
+  <a href="#" id="link-options">設定</a>
+</div>
+
+<!-- Unlock overlay -->
+<div id="unlock-overlay" class="unlock-overlay" style="display:none">
+  <div class="unlock-box">
+    <div class="unlock-title">&#128272; APIキー解除</div>
+    <p class="unlock-desc">設定時に登録したパスワードを入力してください。</p>
+    <input type="password" id="unlock-pw" placeholder="パスワード" autocomplete="off">
+    <div class="unlock-actions">
+      <button id="unlock-ok">解除</button>
+      <button id="unlock-cancel">キャンセル</button>
+    </div>
+  </div>
+</div>
+
+<script src="popup.js"></script>
+</body>
+</html>
