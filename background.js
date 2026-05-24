@@ -277,7 +277,52 @@ async function handleRefineSiteConfig({ hostname, currentConfig, history }) {
 }
 
 // ─── Image analysis (vision) ─────────────────────────────────────────────────
+// Reject URLs targeting loopback / private / link-local / mDNS hosts to prevent
+// the page from coaxing us into fetching internal resources (SSRF).
+function assertPublicHttpUrl(rawUrl) {
+  let u;
+  try { u = new URL(rawUrl); }
+  catch { throw new Error('画像URLが不正です'); }
+
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') {
+    throw new Error(`画像URLのスキームは http/https のみ許可されています (${u.protocol})`);
+  }
+
+  const host = u.hostname.toLowerCase();
+  if (host === 'localhost' || host === '0.0.0.0' || host.endsWith('.local') || host.endsWith('.internal')) {
+    throw new Error(`内部ホストの画像URLは拒否されました (${host})`);
+  }
+
+  // IPv4 literal
+  const v4 = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (v4) {
+    const [a, b] = [parseInt(v4[1], 10), parseInt(v4[2], 10)];
+    const privateV4 =
+      a === 10 ||                                // 10.0.0.0/8
+      a === 127 ||                                // 127.0.0.0/8 loopback
+      (a === 169 && b === 254) ||                 // 169.254.0.0/16 link-local (AWS metadata)
+      (a === 172 && b >= 16 && b <= 31) ||        // 172.16.0.0/12
+      (a === 192 && b === 168) ||                 // 192.168.0.0/16
+      a === 0;
+    if (privateV4) throw new Error(`プライベートIPの画像URLは拒否されました (${host})`);
+  }
+
+  // IPv6 literal (URL.hostname strips brackets)
+  if (host.includes(':')) {
+    const v6 = host;
+    if (v6 === '::1' || v6 === '::' || v6.startsWith('fc') || v6.startsWith('fd') || v6.startsWith('fe80')) {
+      throw new Error(`プライベートIPv6の画像URLは拒否されました (${host})`);
+    }
+    if (v6.startsWith('::ffff:')) {
+      // IPv4-mapped IPv6 — recurse on the embedded v4
+      assertPublicHttpUrl(`${u.protocol}//${v6.slice(7)}${u.pathname}`);
+    }
+  }
+}
+
 async function handleAnalyzeImage({ imageUrl, caption, paperTitle, paperId }) {
+  assertPublicHttpUrl(imageUrl);
+
   const config = await loadConfig();
   const { client, model } = await buildClient(config, 'explain');
 
