@@ -238,6 +238,52 @@ function loadDynamicProvider(hostname) {
   );
 }
 
+// Inline guard against pre-A4 storage / direct manipulation. background.js も
+// 同じ検査をしているが、ここでは「使用前の最終防衛」として再チェックする。
+// utils/selector-guard.js と同期して保つこと。
+const DANGEROUS_SELECTOR_SUBSTRINGS = [
+  'password', 'passwd', 'pwd', 'csrf', 'xsrf', 'token', 'secret',
+  'apikey', 'api-key', 'api_key', 'auth', 'credit', 'cardnumber', 'card-number',
+  'cvv', 'cvc', 'ssn', 'session', 'cookie', 'bearer', 'hidden',
+];
+const DANGEROUS_BARE_TAGS = [
+  'input', 'form', 'button', 'select', 'textarea', 'option', 'fieldset',
+  'iframe', 'script', 'style', 'meta', 'link',
+  'html', 'head', 'body', 'document',
+];
+
+function isSafeSelector(sel) {
+  if (sel == null) return true;                       // 未指定は OK (use 側で null チェック)
+  if (typeof sel !== 'string') return false;
+  const s = sel.trim();
+  if (s === '' || s.length > 200) return s === '';
+  if (/^\s*\*+(\s*[>+~]\s*\*+)*\s*$/.test(s)) return false;
+  const lower = s.toLowerCase();
+  if (DANGEROUS_SELECTOR_SUBSTRINGS.some(b => lower.includes(b))) return false;
+  for (const tag of DANGEROUS_BARE_TAGS) {
+    const re = new RegExp(`(^|[\\s,>+~(])${tag}(?=$|[\\s,>+~.#:\\[])`, 'i');
+    if (re.test(s)) return false;
+  }
+  if (/[\x00-\x1f]/.test(s)) return false;
+  return true;
+}
+
+function sanitizeDynamicConfig(cfg) {
+  const out = { ...cfg };
+  let droppedAny = false;
+  for (const key of ['titleSel', 'abstractSel', 'sectionSel', 'headingSel', 'paragraphSel']) {
+    if (cfg[key] != null && !isSafeSelector(cfg[key])) {
+      console.warn('[TrArXiv] 危険なセレクターを破棄:', key, cfg[key]);
+      out[key] = null;
+      droppedAny = true;
+    }
+  }
+  if (droppedAny && (!out.sectionSel || !out.paragraphSel)) {
+    return null;                                       // 主要セレクターを失ったら無効化
+  }
+  return out;
+}
+
 function makeDynamicProvider(hostname, cfg) {
   return {
     name: hostname,
@@ -281,7 +327,8 @@ function makeDynamicProvider(hostname, cfg) {
   let provider = PROVIDERS.find(p => p.canHandle(location.href));
 
   if (!provider) {
-    const cfg = await loadDynamicProvider(location.hostname);
+    const rawCfg = await loadDynamicProvider(location.hostname);
+    const cfg = rawCfg ? sanitizeDynamicConfig(rawCfg) : null;
     if (cfg) provider = makeDynamicProvider(location.hostname, cfg);
   }
 

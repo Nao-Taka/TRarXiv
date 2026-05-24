@@ -8,6 +8,7 @@ import { TokenTracker }    from './utils/token-tracker.js';
 import { decryptText }     from './utils/crypto.js';
 import { registerPaper, getLibrary, setPaperSummary, setPaperTags, deletePaper } from './utils/library.js';
 import { saveSiteConfig, getSiteConfig, getAllSiteConfigs, deleteSiteConfig } from './utils/site-configs.js';
+import { validateSiteConfig } from './utils/selector-guard.js';
 
 const cache   = new CacheManager();
 const tracker = new TokenTracker();
@@ -177,8 +178,15 @@ async function handleAnalyzeSite({ url, domSummary }) {
     return { success: false, error: 'セレクターを特定できませんでした' };
   }
 
+  let safeParsed;
+  try {
+    safeParsed = validateSiteConfig(parsed);
+  } catch (e) {
+    return { success: false, error: `LLM出力に危険なセレクターが含まれていました: ${e.message}` };
+  }
+
   const hostname = new URL(url).hostname;
-  const siteConfig = { hostname, url, ...parsed };
+  const siteConfig = { hostname, url, ...safeParsed };
   await saveSiteConfig(siteConfig);
 
   // Dynamically register content script for this hostname (best-effort)
@@ -271,7 +279,14 @@ async function handleRefineSiteConfig({ hostname, currentConfig, history }) {
     return { success: false, error: '修正後のセレクターを取得できませんでした' };
   }
 
-  const siteConfig = { ...currentConfig, ...parsed, hostname };
+  let safeParsed;
+  try {
+    safeParsed = validateSiteConfig(parsed);
+  } catch (e) {
+    return { success: false, error: `LLM出力に危険なセレクターが含まれていました: ${e.message}` };
+  }
+
+  const siteConfig = { ...currentConfig, ...safeParsed, hostname };
   await saveSiteConfig(siteConfig);
   return { success: true, config: siteConfig };
 }
