@@ -539,7 +539,9 @@ async function runExplain(section, paperId, paperTitle, btn) {
   const forceRefresh = btn.dataset.explained === '1';
   clearSectionMessages(section);
 
-  const fullText = section.paragraphEls.map(extractText).join('\n\n');
+  // 解説では位置情報を正確に保持する必要がないので [数式] に戻して LLM に送る
+  const fullText = section.paragraphEls.map(extractText).join('\n\n')
+    .replace(/⟦MATH_\d+⟧/g, '[数式]');
   const startTime = Date.now();
 
   // Show generating state
@@ -662,6 +664,8 @@ function insertTranslationBlock(paraEl, pairs, paraId, type = 'translate') {
     block.appendChild(toggleBtn);
   }
 
+  const mathClones = type === 'translate' ? collectMathClones(paraEl) : [];
+
   pairs.forEach((pair, i) => {
     if (!pair.en && !pair.ja) return;
     const pairEl = document.createElement('div');
@@ -670,11 +674,11 @@ function insertTranslationBlock(paraEl, pairs, paraId, type = 'translate') {
 
     const enEl = document.createElement('div');
     enEl.className = 'trarxiv-en';
-    enEl.textContent = pair.en;
+    appendTextWithMath(enEl, pair.en ?? '', mathClones);
 
     const jaEl = document.createElement('div');
     jaEl.className = 'trarxiv-ja';
-    jaEl.textContent = pair.ja;
+    appendTextWithMath(jaEl, pair.ja ?? '', mathClones);
 
     pairEl.appendChild(enEl);
     pairEl.appendChild(jaEl);
@@ -719,12 +723,54 @@ function appendBadge(btn, text, cls) {
   btn.after(badge);
 }
 
+const MATH_SELECTOR = '.ltx_Math, .MathJax, .MathJax_Preview, math, .ltx_eqn_table';
+const MATH_TOKEN_RE = /⟦MATH_(\d+)⟧/g;
+
+// .ltx_Math が <math> をラップするケース等、入れ子になった math のうちトップレベルのみ返す。
+// 抽出時 (extractText) と描画時 (collectMathClones) で同じフィルタを使うことで index 整合を保つ。
+function selectTopLevelMath(root) {
+  const all = [...root.querySelectorAll(MATH_SELECTOR)];
+  return all.filter(m => !all.some(o => o !== m && o.contains(m)));
+}
+
 function extractText(el) {
   const clone = el.cloneNode(true);
-  clone.querySelectorAll('.ltx_Math, .MathJax, .MathJax_Preview, math, .ltx_eqn_table')
-    .forEach(m => m.replaceWith(' [数式] '));
+  selectTopLevelMath(clone).forEach((m, i) => {
+    m.replaceWith(document.createTextNode(` ⟦MATH_${i}⟧ `));
+  });
   clone.querySelectorAll('.ltx_biblio, .ltx_footnote').forEach(m => m.remove());
   return clone.textContent.replace(/\s+/g, ' ').trim();
+}
+
+function collectMathClones(paraEl) {
+  return selectTopLevelMath(paraEl).map(m => m.cloneNode(true));
+}
+
+// テキスト中の ⟦MATH_N⟧ トークンを mathClones[N] の DOM ノードで置換し、target に流し込む。
+// LLM がトークンを脱落 / 余計に増やしても安全 (落とせば数式が消えるだけ、増やせば literal で出る)
+function appendTextWithMath(target, textContent, mathClones) {
+  let lastEnd = 0;
+  let m;
+  MATH_TOKEN_RE.lastIndex = 0;
+  while ((m = MATH_TOKEN_RE.exec(textContent))) {
+    if (m.index > lastEnd) {
+      target.appendChild(document.createTextNode(textContent.slice(lastEnd, m.index)));
+    }
+    const idx = parseInt(m[1], 10);
+    const node = mathClones[idx];
+    if (node) {
+      const wrap = document.createElement('span');
+      wrap.className = 'trarxiv-math';
+      wrap.appendChild(node.cloneNode(true));
+      target.appendChild(wrap);
+    } else {
+      target.appendChild(document.createTextNode(m[0]));
+    }
+    lastEnd = m.index + m[0].length;
+  }
+  if (lastEnd < textContent.length) {
+    target.appendChild(document.createTextNode(textContent.slice(lastEnd)));
+  }
 }
 
 function sendMessage(msg) {
@@ -1212,7 +1258,9 @@ function setupContextListener(provider, paperId, paperTitle, sections) {
         abstract: provider.getAbstract?.() ?? '',
         sections: sections.map(s => ({
           id: s.id, title: s.title,
-          text: s.paragraphEls.map(extractText).join('\n').slice(0, 1000),
+          text: s.paragraphEls.map(extractText).join('\n')
+            .replace(/⟦MATH_\d+⟧/g, '[数式]')
+            .slice(0, 1000),
         })),
       });
       return true;

@@ -464,3 +464,14 @@
   cursor: pointer;
 }
 .trarxiv-unlock-cancel:hover { background: #e2e8f0; }
+
+/* ── Math placeholder restoration (A7) ───────────────────────────────────── */
+.trarxiv-math {
+  display: inline-block;
+  vertical-align: middle;
+  margin: 0 0.15em;
+}
+/* ブロック数式 (.ltx_eqn_table) はラップしても元の display を尊重 */
+.trarxiv-math .ltx_eqn_table {
+  display: inline-table;
+}
