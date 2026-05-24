@@ -374,6 +374,7 @@ function makeDynamicProvider(hostname, cfg) {
   if (provider.isAbsPage) {
     injectAbsLinkBtn(paperId, provider);
     injectPaperBriefingBtn(paperId, paperTitle, provider);
+    injectPositioningBtn(paperId, paperTitle, provider);
     setupContextListener(provider, paperId, paperTitle, []);
     return;
   }
@@ -383,6 +384,7 @@ function makeDynamicProvider(hostname, cfg) {
   sections.forEach(section => injectButtons(section, paperId, paperTitle));
   injectBulkBar(sections, paperId, paperTitle);
   injectPaperBriefingBtn(paperId, paperTitle, provider);
+  injectPositioningBtn(paperId, paperTitle, provider);
   injectAuthorButtons(paperId, paperTitle);
   injectFigureButtons(paperId, paperTitle);
   setupContextListener(provider, paperId, paperTitle, sections);
@@ -1132,6 +1134,196 @@ function appendBriefingBadge(btn, text, cls) {
   badge.className = cls;
   badge.textContent = text;
   btn.after(badge);
+}
+
+// ─── Paper Positioning (A11: 位置づけ + 関連論文) ──────────────────────────────
+const ARXIV_ID_RE_NEW = /^\d{4}\.\d{4,5}$/;
+const ARXIV_ID_RE_OLD = /^[a-z-]+(\.[A-Z]{2})?\/\d{7}$/i;
+
+function injectPositioningBtn(paperId, paperTitle, provider) {
+  if (!ARXIV_ID_RE_NEW.test(paperId) && !ARXIV_ID_RE_OLD.test(paperId)) return;
+
+  // 既存の briefing wrap に並べる (両 wrap は title 下に存在)
+  const wrap = document.querySelector('.trarxiv-briefing-wrap');
+  if (!wrap || wrap.querySelector('.trarxiv-positioning-btn')) return;
+
+  const btn = document.createElement('button');
+  btn.className = 'trarxiv-btn trarxiv-positioning-btn';
+  btn.textContent = '📊 位置づけ・関連論文';
+
+  const card = document.createElement('div');
+  card.className = 'trarxiv-positioning-card';
+  card.style.display = 'none';
+
+  wrap.appendChild(btn);
+  wrap.appendChild(card);
+
+  btn.addEventListener('click', () => runPaperPositioning(paperId, paperTitle, provider, btn, card));
+}
+
+async function runPaperPositioning(paperId, paperTitle, provider, btn, card) {
+  if (btn.disabled) return;
+
+  // Toggle
+  if (card.style.display !== 'none') {
+    card.style.display = 'none';
+    btn.textContent = '📊 位置づけ・関連論文';
+    return;
+  }
+  if (card.dataset.populated === '1') {
+    card.style.display = '';
+    btn.textContent = '✕ 位置づけを閉じる';
+    return;
+  }
+
+  const forceRefresh = btn.dataset.fetched === '1';
+  const abstract = provider.getAbstract?.() ?? '';
+
+  btn.disabled = true;
+  renderSpinnerLabel(btn, '分析中...');
+  const startTime = Date.now();
+  const ticker = setInterval(() => {
+    const el = btn.querySelector('.trarxiv-progress-label');
+    if (el) el.textContent = `分析中... ${((Date.now() - startTime) / 1000).toFixed(0)}s`;
+  }, 500);
+
+  try {
+    const msg = { action: 'paperPositioning', paperId, paperTitle, abstract, forceRefresh };
+    let result = await sendMessage(msg);
+
+    if (result.error === 'NEEDS_PASSWORD') {
+      try {
+        await ensureKeysUnlocked();
+        result = await sendMessage(msg);
+      } catch {
+        btn.disabled = false;
+        btn.textContent = '📊 位置づけ・関連論文';
+        return;
+      }
+    }
+
+    if (result.error) throw new Error(result.error);
+
+    renderPositioningCard(card, result);
+    card.dataset.populated = '1';
+    card.style.display = '';
+
+    btn.disabled = false;
+    btn.dataset.fetched = '1';
+    btn.textContent = '✕ 位置づけを閉じる';
+
+    if (result.fromCache) {
+      appendBriefingBadge(btn, 'キャッシュ', 'trarxiv-cache-badge');
+    } else {
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      appendBriefingBadge(btn, `${elapsed}s`, 'trarxiv-time-badge');
+    }
+  } catch (err) {
+    btn.disabled = false;
+    btn.textContent = '📊 位置づけ・関連論文';
+    const errEl = document.createElement('span');
+    errEl.className = 'trarxiv-error';
+    errEl.textContent = `⚠ ${err.message}`;
+    btn.after(errEl);
+    setTimeout(() => errEl.remove(), 6000);
+  } finally {
+    clearInterval(ticker);
+  }
+}
+
+function renderPositioningCard(card, result) {
+  card.replaceChildren();
+
+  // ── Positioning analysis (LLM output) ──
+  const analysisDiv = document.createElement('div');
+  analysisDiv.className = 'trarxiv-positioning-analysis';
+  const LABELS = ['🎯立ち位置', '📜先行研究との関係', '🚀後続への影響', '➡️次に読むべき論文'];
+  const lines = (result.positioning ?? '').split('\n').map(l => l.trim()).filter(Boolean);
+  let current = null;
+  for (const line of lines) {
+    const matched = LABELS.find(lb => line.startsWith(lb));
+    if (matched) {
+      if (current) analysisDiv.appendChild(buildPositioningSection(current));
+      const colonIdx = line.indexOf('：') !== -1 ? line.indexOf('：') : line.indexOf(':');
+      const body = colonIdx >= 0 ? line.slice(colonIdx + 1).trim() : '';
+      current = { label: matched, body };
+    } else if (current) {
+      current.body += (current.body ? ' ' : '') + line;
+    }
+  }
+  if (current) analysisDiv.appendChild(buildPositioningSection(current));
+  if (analysisDiv.children.length === 0) {
+    const raw = document.createElement('div');
+    raw.textContent = result.positioning ?? '';
+    analysisDiv.appendChild(raw);
+  }
+  card.appendChild(analysisDiv);
+
+  // ── Related papers ──
+  if (result.related) {
+    const groups = [
+      { key: 'references',      title: '📜 引用先 (References)' },
+      { key: 'recommendations', title: '✨ 推薦類似 (Recommendations)' },
+      { key: 'citations',       title: '🔗 被引用 (Cited by)' },
+    ];
+    for (const g of groups) {
+      const papers = result.related[g.key];
+      if (!Array.isArray(papers) || papers.length === 0) continue;
+
+      const hdr = document.createElement('div');
+      hdr.className = 'trarxiv-positioning-group-hdr';
+      hdr.textContent = g.title;
+      card.appendChild(hdr);
+
+      const ul = document.createElement('ul');
+      ul.className = 'trarxiv-positioning-papers';
+      for (const p of papers.slice(0, 8)) {
+        const li = document.createElement('li');
+        const a = document.createElement('a');
+        a.href = p.url ?? `https://www.semanticscholar.org/paper/${encodeURIComponent(p.paperId ?? '')}`;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.textContent = p.title ?? '(no title)';
+        li.appendChild(a);
+        const meta = [];
+        if (p.year)  meta.push(p.year);
+        if (p.venue) meta.push(p.venue);
+        if (p.citationCount != null) meta.push(`cited ${p.citationCount}`);
+        if (Array.isArray(p.authors) && p.authors.length > 0) {
+          meta.push(p.authors[0].name + (p.authors.length > 1 ? ' et al.' : ''));
+        }
+        if (meta.length > 0) li.append(' — ' + meta.join(', '));
+        ul.appendChild(li);
+      }
+      card.appendChild(ul);
+    }
+  }
+
+  if (result.relatedError) {
+    const warn = document.createElement('div');
+    warn.className = 'trarxiv-positioning-warn';
+    warn.textContent = `⚠ 関連論文の取得に一部失敗: ${result.relatedError}`;
+    card.appendChild(warn);
+  }
+
+  // ── Footer note ──
+  const note = document.createElement('div');
+  note.className = 'trarxiv-author-note';
+  const noteSpan = document.createElement('span');
+  noteSpan.textContent = '出典: Semantic Scholar + LLM分析。チャットでも関連論文情報が活用されます';
+  note.appendChild(noteSpan);
+  card.appendChild(note);
+}
+
+function buildPositioningSection({ label, body }) {
+  const div = document.createElement('div');
+  div.className = 'trarxiv-positioning-section';
+  const labelSpan = document.createElement('span');
+  labelSpan.className = 'trarxiv-positioning-label';
+  labelSpan.textContent = label + ' ';
+  div.appendChild(labelSpan);
+  div.appendChild(document.createTextNode(body));
+  return div;
 }
 
 // ─── Author Research ──────────────────────────────────────────────────────────

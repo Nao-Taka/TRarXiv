@@ -97,3 +97,82 @@ export async function fetchAuthorInfo(authorName) {
   }
   return { candidates, topPapers };
 }
+
+// ─── Paper context (A11: 位置づけ + 関連論文) ────────────────────────────────
+
+const PAPER_FIELDS = 'title,year,venue,citationCount,authors.name';
+
+async function s2Fetch(url) {
+  const res = await fetch(url, { headers: { 'Accept': 'application/json' } });
+  if (res.status === 429) throw new Error('Semantic Scholar APIのレート制限');
+  if (!res.ok) throw new Error(`Semantic Scholar API (HTTP ${res.status})`);
+  return res.json();
+}
+
+/**
+ * arXiv ID から Semantic Scholar paper を取得
+ * @param {string} arxivId 'XXXX.YYYYY' or 'cs.AI/0001001' 形式
+ */
+export async function getPaperByArxivId(arxivId) {
+  const url = new URL(`${BASE}/paper/arXiv:${arxivId}`);
+  url.searchParams.set('fields', 'paperId,title,year,venue,citationCount,referenceCount,influentialCitationCount');
+  return s2Fetch(url.toString());
+}
+
+export async function getReferences(paperId, { limit = 10 } = {}) {
+  const url = new URL(`${BASE}/paper/${encodeURIComponent(paperId)}/references`);
+  url.searchParams.set('limit', String(limit));
+  url.searchParams.set('fields', PAPER_FIELDS);
+  const data = await s2Fetch(url.toString());
+  return (data?.data ?? []).map(d => d.citedPaper).filter(Boolean);
+}
+
+export async function getCitations(paperId, { limit = 10 } = {}) {
+  const url = new URL(`${BASE}/paper/${encodeURIComponent(paperId)}/citations`);
+  url.searchParams.set('limit', String(limit));
+  url.searchParams.set('fields', PAPER_FIELDS);
+  const data = await s2Fetch(url.toString());
+  return (data?.data ?? []).map(d => d.citingPaper).filter(Boolean);
+}
+
+export async function getRecommendations(paperId, { limit = 5 } = {}) {
+  // recommendations は別エンドポイント (recommendations/v1)
+  const url = new URL(
+    `https://api.semanticscholar.org/recommendations/v1/papers/forpaper/${encodeURIComponent(paperId)}`
+  );
+  url.searchParams.set('limit', String(limit));
+  url.searchParams.set('fields', PAPER_FIELDS);
+  const data = await s2Fetch(url.toString());
+  return data?.recommendedPapers ?? [];
+}
+
+/**
+ * arXiv ID から関連論文情報を一括取得。
+ * 各サブ取得は Promise.allSettled で並列実行し、部分失敗を許容。
+ *
+ * @param {string} arxivId
+ * @returns {Promise<{paper, references, citations, recommendations, errors}>}
+ */
+export async function fetchPaperContext(arxivId) {
+  const paper = await getPaperByArxivId(arxivId);
+  if (!paper?.paperId) throw new Error('論文IDが取得できませんでした');
+
+  const [refsR, citesR, recsR] = await Promise.allSettled([
+    getReferences(paper.paperId, { limit: 10 }),
+    getCitations(paper.paperId, { limit: 10 }),
+    getRecommendations(paper.paperId, { limit: 5 }),
+  ]);
+
+  const errors = {};
+  if (refsR.status === 'rejected')  errors.references = refsR.reason?.message ?? 'unknown';
+  if (citesR.status === 'rejected') errors.citations  = citesR.reason?.message ?? 'unknown';
+  if (recsR.status === 'rejected')  errors.recommendations = recsR.reason?.message ?? 'unknown';
+
+  return {
+    paper,
+    references:      refsR.status  === 'fulfilled' ? refsR.value  : [],
+    citations:       citesR.status === 'fulfilled' ? citesR.value : [],
+    recommendations: recsR.status  === 'fulfilled' ? recsR.value  : [],
+    errors,
+  };
+}

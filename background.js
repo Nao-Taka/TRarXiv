@@ -9,7 +9,7 @@ import { decryptText }     from './utils/crypto.js';
 import { registerPaper, getLibrary, setPaperSummary, setPaperTags, deletePaper } from './utils/library.js';
 import { saveSiteConfig, getSiteConfig, getAllSiteConfigs, deleteSiteConfig } from './utils/site-configs.js';
 import { validateSiteConfig } from './utils/selector-guard.js';
-import { fetchAuthorInfo }   from './utils/semantic-scholar.js';
+import { fetchAuthorInfo, fetchPaperContext } from './utils/semantic-scholar.js';
 
 const cache   = new CacheManager();
 const tracker = new TokenTracker();
@@ -78,6 +78,8 @@ async function dispatch(msg, tabId) {
     case 'explain':          return handleExplain(msg, tabId);
     case 'chat':             return handleChat(msg);
     case 'paperBriefing':    return handlePaperBriefing(msg);
+    case 'paperPositioning': return handlePaperPositioning(msg);
+    case 'getPaperRelated':  return handleGetPaperRelated(msg);
     case 'authorResearch':   return handleAuthorResearch(msg);
     case 'getTokenStats':    return tracker.getStats();
     case 'getTokenBudget':   return handleGetTokenBudget(msg);
@@ -585,6 +587,88 @@ async function handlePaperBriefing({ paperId, paperTitle, abstract, forceRefresh
   return result;
 }
 
+// ─── Paper Positioning (A11) ─────────────────────────────────────────────────
+// arXiv 論文限定。論文の研究分野での位置づけ + 関連論文を返す。
+function isArxivPaperId(paperId) {
+  // 新形式 'XXXX.YYYYY' or 旧形式 'cs.AI/0001001' 等
+  return /^\d{4}\.\d{4,5}$/.test(paperId) || /^[a-z-]+(\.[A-Z]{2})?\/\d{7}$/i.test(paperId);
+}
+
+async function handleGetPaperRelated({ paperId, forceRefresh = false }) {
+  if (!isArxivPaperId(paperId)) {
+    throw new Error('関連論文取得は arXiv 論文でのみ対応しています');
+  }
+  if (!forceRefresh) {
+    const cached = await cache.get('related', paperId, 'main');
+    if (cached) return { ...cached, fromCache: true };
+  }
+  const ctx = await fetchPaperContext(paperId);
+  await cache.set('related', paperId, 'main', ctx);
+  return ctx;
+}
+
+async function handlePaperPositioning({ paperId, paperTitle, abstract, forceRefresh = false }) {
+  if (!isArxivPaperId(paperId)) {
+    throw new Error('論文の位置づけ機能は arXiv 論文でのみ対応しています');
+  }
+  if (!forceRefresh) {
+    const cached = await cache.get('positioning', paperId, 'main');
+    if (cached) return { ...cached, fromCache: true };
+  }
+
+  // S2 から関連論文を取得 (失敗しても LLM 分析は続行、警告だけ付与)
+  let related = null;
+  let relatedError = null;
+  try {
+    related = await fetchPaperContext(paperId);
+  } catch (e) {
+    relatedError = e.message;
+  }
+
+  const refsText = (related?.references ?? []).slice(0, 8).map(r =>
+    `- ${r.title} (${r.year ?? '?'}, ${r.authors?.[0]?.name ?? '?'} et al., cited ${r.citationCount ?? '?'})`
+  ).join('\n');
+  const citesText = (related?.citations ?? []).slice(0, 8).map(r =>
+    `- ${r.title} (${r.year ?? '?'}, cited ${r.citationCount ?? '?'})`
+  ).join('\n');
+  const recsText = (related?.recommendations ?? []).slice(0, 5).map(r =>
+    `- ${r.title} (${r.year ?? '?'})`
+  ).join('\n');
+
+  const config = await loadConfig();
+  const { client, model } = await buildClient(config, 'explain');
+
+  const messages = [
+    {
+      role: 'system',
+      content: 'あなたは学術論文の位置づけを分析するアシスタントです。' +
+               '提供された Semantic Scholar の関連論文情報を踏まえて、日本語で簡潔に答えてください。',
+    },
+    {
+      role: 'user',
+      content:
+        `論文「${paperTitle}」について、研究分野における位置づけを分析してください。\n\n` +
+        `アブストラクト:\n${(abstract ?? '').slice(0, 2500)}\n\n` +
+        `この論文が引用している先行研究 (Semantic Scholar, 最大8件):\n${refsText || '(取得失敗または無し)'}\n\n` +
+        `この論文を引用している後続研究 (Semantic Scholar, 最大8件):\n${citesText || '(取得失敗または無し)'}\n\n` +
+        `推薦される類似論文 (Semantic Scholar, 最大5件):\n${recsText || '(取得失敗または無し)'}\n\n` +
+        `【出力形式】各行を必ず以下のラベルで始めてください:\n` +
+        `🎯立ち位置: この論文が研究分野のどんな流れの中にあるか (1〜2文)\n` +
+        `📜先行研究との関係: 主要な先行研究をどう発展/反証/組み合わせているか (2〜3文)\n` +
+        `🚀後続への影響: どんな後続研究を生み出したか、影響範囲 (1〜2文)\n` +
+        `➡️次に読むべき論文: 上記から重要そうな2〜3本を選び、選定理由とともに列挙`,
+    },
+  ];
+
+  const { content, usage } = await complete(client, messages);
+  await tracker.track(model, usage);
+  addPaperTokens(paperId, usage);
+
+  const result = { positioning: content, related, relatedError };
+  await cache.set('positioning', paperId, 'main', result);
+  return result;
+}
+
 // ─── Author Research (Semantic Scholar — no LLM fallback) ────────────────────
 async function handleAuthorResearch({ authorName }) {
   const authorKey = authorName.toLowerCase().replace(/\s+/g, '_');
@@ -606,13 +690,44 @@ async function handleChat({ messages, paperContext }) {
   const config = await loadConfig();
   const { client, model } = await buildClient(config, 'chat');
 
+  // A11: 「位置づけ・関連論文」を一度でも開いたことのある論文は、その時取得した
+  // Semantic Scholar データを chat の system prompt に注入する (キャッシュヒット時のみ)。
+  // チャット中に「次に読むべき論文は?」「先行研究は?」等の質問に答えやすくなる。
+  let relatedSummary = '';
+  if (paperContext?.paperId) {
+    try {
+      const cachedRelated = await cache.get('related', paperContext.paperId, 'main');
+      if (cachedRelated) {
+        const parts = [];
+        if (Array.isArray(cachedRelated.references) && cachedRelated.references.length > 0) {
+          parts.push('引用先 (References):\n' + cachedRelated.references.slice(0, 6)
+            .map(r => `- ${r.title} (${r.year ?? '?'}, ${r.authors?.[0]?.name ?? '?'} et al.)`).join('\n'));
+        }
+        if (Array.isArray(cachedRelated.citations) && cachedRelated.citations.length > 0) {
+          parts.push('被引用 (Cited by):\n' + cachedRelated.citations.slice(0, 6)
+            .map(r => `- ${r.title} (${r.year ?? '?'}, cited ${r.citationCount ?? '?'})`).join('\n'));
+        }
+        if (Array.isArray(cachedRelated.recommendations) && cachedRelated.recommendations.length > 0) {
+          parts.push('推薦類似 (Recommendations):\n' + cachedRelated.recommendations.slice(0, 5)
+            .map(r => `- ${r.title} (${r.year ?? '?'})`).join('\n'));
+        }
+        if (parts.length > 0) {
+          relatedSummary = '\n\n【関連論文 (Semantic Scholar)】\n' + parts.join('\n');
+        }
+      }
+    } catch {
+      // キャッシュ無し or 取得失敗は無視 (関連論文無しで chat 続行)
+    }
+  }
+
   const systemContent =
     `あなたは学術論文の理解を支援するAIアシスタントです。\n` +
     `以下の論文に関する質問に、本文の文脈に沿って丁寧に回答してください。\n\n` +
     `【論文情報】\n` +
     `タイトル: ${paperContext.title ?? '不明'}\n` +
     `アブストラクト: ${(paperContext.abstract ?? '').slice(0, 2000)}\n` +
-    `セクション: ${(paperContext.sections ?? []).map(s => s.title).join(', ')}`;
+    `セクション: ${(paperContext.sections ?? []).map(s => s.title).join(', ')}` +
+    relatedSummary;
 
   const fullMessages = [{ role: 'system', content: systemContent }, ...messages];
   const { content, usage } = await complete(client, fullMessages);

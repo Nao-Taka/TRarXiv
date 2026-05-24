@@ -535,3 +535,61 @@
 }
 .trarxiv-author-papers li,
 .trarxiv-author-alt li { margin: 2px 0; }
+
+/* ── Paper positioning (A11) ─────────────────────────────────────────────── */
+.trarxiv-positioning-btn {
+  margin-left: 8px;
+  background: #f0fdf4;
+  color: #166534;
+  border: 1px solid #86efac;
+}
+.trarxiv-positioning-btn:hover:not(:disabled) {
+  background: #dcfce7;
+}
+.trarxiv-positioning-card {
+  margin-top: 10px;
+  padding: 14px 16px;
+  border: 1px solid #bbf7d0;
+  border-radius: 8px;
+  background: #f0fdf4;
+  font-size: 13.5px;
+  line-height: 1.65;
+  color: #1f2937;
+}
+.trarxiv-positioning-analysis {
+  margin-bottom: 8px;
+}
+.trarxiv-positioning-section {
+  margin: 6px 0;
+}
+.trarxiv-positioning-label {
+  font-weight: 600;
+  color: #166534;
+}
+.trarxiv-positioning-group-hdr {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #14532d;
+  margin: 10px 0 4px;
+}
+.trarxiv-positioning-papers {
+  margin: 0 0 6px;
+  padding-left: 18px;
+  font-size: 12.5px;
+  color: #1f2937;
+  line-height: 1.55;
+}
+.trarxiv-positioning-papers li { margin: 3px 0; }
+.trarxiv-positioning-papers a {
+  color: #166534 !important;
+  text-decoration: none !important;
+}
+.trarxiv-positioning-papers a:hover { text-decoration: underline !important; }
+.trarxiv-positioning-warn {
+  margin-top: 6px;
+  padding: 6px 10px;
+  background: #fef3c7;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #92400e;
+}
