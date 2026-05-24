@@ -397,34 +397,43 @@ function makeDynamicProvider(hostname, cfg) {
 })();
 
 // ─── arxiv.org/abs/ — HTML or ar5iv link button ───────────────────────────────
+// 配置: 右側ペイン "Access Paper" の <ul> (View PDF / TeX Source の並び) に追加。
+// 見つからない場合は title 下にフォールバック。
 function injectAbsLinkBtn(paperId, provider) {
-  const titleEl = document.querySelector('h1.title');
-  if (!titleEl || titleEl.parentElement?.querySelector('.trarxiv-abs-link-wrap')) return;
+  if (document.querySelector('.trarxiv-abs-link-btn')) return;
 
   const rawId  = provider.getRawPaperId?.(location.href) ?? paperId;
   const hasHtml = provider.hasHtmlVersion?.() ?? false;
 
-  const wrap = document.createElement('div');
-  wrap.className = 'trarxiv-abs-link-wrap';
-
   const link = document.createElement('a');
-  link.className = 'trarxiv-btn trarxiv-abs-link-btn';
+  link.className = 'abs-button trarxiv-abs-link-btn';
   link.target = '_blank';
   link.rel = 'noopener noreferrer';
   if (hasHtml) {
     link.href = `https://arxiv.org/html/${rawId}`;
-    link.textContent = '📄 TRarXiv で読む (HTML版)';
+    link.textContent = '📄 TRarXiv で読む (HTML)';
+    link.title = 'TRarXiv で翻訳・解説しながら読む';
   } else {
     link.href = `https://ar5iv.org/abs/${rawId}`;
-    link.textContent = '📑 ar5iv 経由で読む (HTML版なし)';
-    const note = document.createElement('span');
-    note.className = 'trarxiv-abs-link-note';
-    note.textContent = ' ※ ar5iv は arXiv の LaTeX を HTML 変換するサードパーティサービス';
-    wrap.appendChild(link);
-    wrap.appendChild(note);
-    titleEl.after(wrap);
+    link.textContent = '📑 ar5iv で読む';
+    link.title = 'arXiv に HTML 版がないため、サードパーティの ar5iv 経由で開く (TRarXiv は ar5iv にも対応)';
+  }
+
+  // Primary: arxiv abs ページの "Access Paper" リスト (.full-text ul) の末尾に追加
+  const accessList = document.querySelector('.full-text ul');
+  if (accessList) {
+    const li = document.createElement('li');
+    li.className = 'trarxiv-abs-link-li';
+    li.appendChild(link);
+    accessList.appendChild(li);
     return;
   }
+
+  // Fallback: タイトル直下に wrap で配置 (構造が違う abs ページ用)
+  const titleEl = document.querySelector('h1.title');
+  if (!titleEl) return;
+  const wrap = document.createElement('div');
+  wrap.className = 'trarxiv-abs-link-wrap';
   wrap.appendChild(link);
   titleEl.after(wrap);
 }
