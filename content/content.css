@@ -593,3 +593,62 @@
   font-size: 12px;
   color: #92400e;
 }
+
+/* ── Inline reference annotations (A14) ──────────────────────────────────── */
+.trarxiv-ref-token {
+  font-size: 75%;
+  margin: 0 1px;
+}
+.trarxiv-ref-token a {
+  color: #2563eb !important;
+  text-decoration: none !important;
+}
+.trarxiv-ref-token a:hover { text-decoration: underline !important; }
+
+.trarxiv-refs-inline {
+  margin: 4px 0 4px 16px;
+  padding: 6px 10px 4px 12px;
+  border-left: 2px solid #cbd5e1;
+  background: #f8fafc;
+  border-radius: 0 4px 4px 0;
+  font-size: 11.5px;
+  color: #475569;
+  line-height: 1.5;
+}
+.trarxiv-ref-item {
+  margin: 2px 0;
+  cursor: default;
+}
+.trarxiv-ref-num {
+  font-weight: 600;
+  color: #1e40af;
+  margin-right: 2px;
+}
+.trarxiv-ref-title { color: #1f2937; }
+.trarxiv-ref-meta { color: #64748b; font-size: 11px; }
+.trarxiv-ref-summary {
+  margin-top: 3px;
+  padding: 4px 8px;
+  background: #eff6ff;
+  border-left: 2px solid #93c5fd;
+  border-radius: 0 3px 3px 0;
+  font-size: 11px;
+  color: #1e3a8a;
+}
+.trarxiv-ref-summary.loading {
+  background: #fff7ed;
+  border-left-color: #fdba74;
+  color: #9a3412;
+  font-style: italic;
+}
+.trarxiv-ref-summary.error {
+  background: #fef2f2;
+  border-left-color: #fca5a5;
+  color: #991b1b;
+}
+.trarxiv-ref-s2link {
+  color: #2563eb !important;
+  text-decoration: none !important;
+  font-size: 10.5px;
+}
+.trarxiv-ref-s2link:hover { text-decoration: underline !important; }

@@ -381,6 +381,10 @@ function makeDynamicProvider(hostname, cfg) {
 
   const sections = provider.getSections();
   if (sections.length === 0) return;
+
+  // A14: 参考文献マップを一度だけ構築 (ページ内で共有)
+  _bibMap = buildBibliographyMap();
+
   sections.forEach(section => injectButtons(section, paperId, paperTitle));
   injectBulkBar(sections, paperId, paperTitle);
   injectPaperBriefingBtn(paperId, paperTitle, provider);
@@ -612,7 +616,8 @@ async function runExplain(section, paperId, paperTitle, btn) {
 
   // 解説では位置情報を正確に保持する必要がないので [数式] に戻して LLM に送る
   const fullText = section.paragraphEls.map(extractText).join('\n\n')
-    .replace(/⟦MATH_\d+⟧/g, '[数式]');
+    .replace(/⟦MATH_\d+⟧/g, '[数式]')
+    .replace(/⟦REF:[^⟧]+⟧/g, '[REF]');
   const startTime = Date.now();
 
   // Show generating state
@@ -753,6 +758,13 @@ function insertTranslationBlock(paraEl, pairs, paraId, type = 'translate') {
 
     pairEl.appendChild(enEl);
     pairEl.appendChild(jaEl);
+
+    // A14: ペアに含まれる参考文献を直下に小インデントで表示。ホバーで abstract 要約
+    if (type === 'translate' && _bibMap) {
+      const refsBlock = buildInlineRefList(pair.ja ?? '', pair.en ?? '', _bibMap);
+      if (refsBlock) pairEl.appendChild(refsBlock);
+    }
+
     block.appendChild(pairEl);
 
     pairEl.addEventListener('mouseenter', () => pairEl.classList.add('trarxiv-active'));
@@ -795,7 +807,6 @@ function appendBadge(btn, text, cls) {
 }
 
 const MATH_SELECTOR = '.ltx_Math, .MathJax, .MathJax_Preview, math, .ltx_eqn_table';
-const MATH_TOKEN_RE = /⟦MATH_(\d+)⟧/g;
 
 // .ltx_Math が <math> をラップするケース等、入れ子になった math のうちトップレベルのみ返す。
 // 抽出時 (extractText) と描画時 (collectMathClones) で同じフィルタを使うことで index 整合を保つ。
@@ -804,10 +815,23 @@ function selectTopLevelMath(root) {
   return all.filter(m => !all.some(o => o !== m && o.contains(m)));
 }
 
+// A14: bib 参照キー抽出。'#bib.bib1' / 'bib.bib1' / 'bib1' → '1'
+function extractRefKey(hrefOrId) {
+  const cleaned = (hrefOrId ?? '').replace(/^#/, '');
+  const m = cleaned.match(/^bib\.?(?:bib)?(.+)$/i);
+  return m ? m[1] : cleaned;
+}
+
 function extractText(el) {
   const clone = el.cloneNode(true);
+  // 数式 (A7) — トークン化
   selectTopLevelMath(clone).forEach((m, i) => {
     m.replaceWith(document.createTextNode(` ⟦MATH_${i}⟧ `));
+  });
+  // 参考文献リンク (A14) — トークン化
+  clone.querySelectorAll('a[href^="#bib"]').forEach(a => {
+    const key = extractRefKey(a.getAttribute('href'));
+    a.replaceWith(document.createTextNode(` ⟦REF:${key}⟧ `));
   });
   clone.querySelectorAll('.ltx_biblio, .ltx_footnote').forEach(m => m.remove());
   return clone.textContent.replace(/\s+/g, ' ').trim();
@@ -817,31 +841,87 @@ function collectMathClones(paraEl) {
   return selectTopLevelMath(paraEl).map(m => m.cloneNode(true));
 }
 
-// テキスト中の ⟦MATH_N⟧ トークンを mathClones[N] の DOM ノードで置換し、target に流し込む。
-// LLM がトークンを脱落 / 余計に増やしても安全 (落とせば数式が消えるだけ、増やせば literal で出る)
-function appendTextWithMath(target, textContent, mathClones) {
+// A14: 文書全体の参考文献マップ。bib key → {title, authors, year, refId}
+function buildBibliographyMap() {
+  const map = new Map();
+  document.querySelectorAll('.ltx_bibitem, li[id^="bib"]').forEach(item => {
+    const id = item.id;
+    if (!id) return;
+    const key = extractRefKey(id);
+
+    const titleEl   = item.querySelector('.ltx_bib_title');
+    const journalEl = item.querySelector('.ltx_bib_journal, .ltx_bib_publisher');
+    const authorEl  = item.querySelector('.ltx_bib_author');
+    const yearEl    = item.querySelector('.ltx_bib_year');
+
+    const title   = (titleEl ?? journalEl)?.textContent?.trim() ?? '';
+    const authors = authorEl?.textContent?.trim() ?? '';
+    const year    = yearEl?.textContent?.trim() ?? '';
+
+    let display = title;
+    if (!display) {
+      // 構造化フィールドなし → 全テキストから採取
+      const text = item.textContent.replace(/^\[\d+\]\s*/, '').trim();
+      display = text.length > 150 ? text.slice(0, 150) + '…' : text;
+    }
+
+    map.set(key, { title: display, authors, year, refId: id });
+  });
+  return map;
+}
+
+let _bibMap = null;  // init() で設定。論文ページ内で共有
+
+// テキスト中の ⟦MATH_N⟧ と ⟦REF:X⟧ トークンを実 DOM に展開して target に流し込む。
+// LLM がトークンを脱落/追加/改変しても安全 (literal フォールバック)。
+function appendTextWithMathAndRefs(target, textContent, mathClones, bibMap) {
+  // 1つの正規表現で MATH と REF の両方を扱う
+  const TOKEN_RE = /⟦(?:MATH_(\d+)|REF:([^⟧]+))⟧/g;
   let lastEnd = 0;
   let m;
-  MATH_TOKEN_RE.lastIndex = 0;
-  while ((m = MATH_TOKEN_RE.exec(textContent))) {
+  while ((m = TOKEN_RE.exec(textContent))) {
     if (m.index > lastEnd) {
       target.appendChild(document.createTextNode(textContent.slice(lastEnd, m.index)));
     }
-    const idx = parseInt(m[1], 10);
-    const node = mathClones[idx];
-    if (node) {
-      const wrap = document.createElement('span');
-      wrap.className = 'trarxiv-math';
-      wrap.appendChild(node.cloneNode(true));
-      target.appendChild(wrap);
-    } else {
-      target.appendChild(document.createTextNode(m[0]));
+    if (m[1] !== undefined) {
+      // MATH
+      const idx  = parseInt(m[1], 10);
+      const node = mathClones?.[idx];
+      if (node) {
+        const wrap = document.createElement('span');
+        wrap.className = 'trarxiv-math';
+        wrap.appendChild(node.cloneNode(true));
+        target.appendChild(wrap);
+      } else {
+        target.appendChild(document.createTextNode(m[0]));
+      }
+    } else if (m[2] !== undefined) {
+      // REF
+      const key = m[2];
+      const sup = document.createElement('sup');
+      sup.className = 'trarxiv-ref-token';
+      sup.textContent = `[${key}]`;
+      if (bibMap?.has(key)) {
+        const bib = bibMap.get(key);
+        sup.dataset.refKey = key;
+        sup.title = bib.title + (bib.authors ? ` — ${bib.authors}` : '') + (bib.year ? ` (${bib.year})` : '');
+        const a = document.createElement('a');
+        a.href = `#${bib.refId}`;
+        a.textContent = sup.textContent;
+        sup.replaceChildren(a);
+      }
+      target.appendChild(sup);
     }
     lastEnd = m.index + m[0].length;
   }
   if (lastEnd < textContent.length) {
     target.appendChild(document.createTextNode(textContent.slice(lastEnd)));
   }
+}
+
+// 後方互換のため math のみ版もエクスポート (内部で REFs なし版を呼ぶ)
+function appendTextWithMath(target, textContent, mathClones) {
+  appendTextWithMathAndRefs(target, textContent, mathClones, _bibMap);
 }
 
 function sendMessage(msg) {
@@ -1315,6 +1395,119 @@ function renderPositioningCard(card, result) {
   card.appendChild(note);
 }
 
+// ─── Inline reference list (A14) ──────────────────────────────────────────────
+function buildInlineRefList(jaText, enText, bibMap) {
+  const refKeys = new Set();
+  for (const text of [jaText, enText]) {
+    for (const m of text.matchAll(/⟦REF:([^⟧]+)⟧/g)) refKeys.add(m[1]);
+  }
+  if (refKeys.size === 0) return null;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'trarxiv-refs-inline';
+
+  let addedAny = false;
+  for (const key of refKeys) {
+    const bib = bibMap.get(key);
+    if (!bib) continue;
+
+    const item = document.createElement('div');
+    item.className = 'trarxiv-ref-item';
+    item.dataset.refKey = key;
+
+    const numSpan = document.createElement('span');
+    numSpan.className = 'trarxiv-ref-num';
+    numSpan.textContent = `[${key}]`;
+
+    const titleSpan = document.createElement('span');
+    titleSpan.className = 'trarxiv-ref-title';
+    titleSpan.textContent = bib.title;
+
+    const metaSpan = document.createElement('span');
+    metaSpan.className = 'trarxiv-ref-meta';
+    const meta = [];
+    if (bib.authors) meta.push(bib.authors);
+    if (bib.year)    meta.push(bib.year);
+    if (meta.length > 0) metaSpan.textContent = ' — ' + meta.join(', ');
+
+    item.append(numSpan, ' ', titleSpan, metaSpan);
+
+    // ホバー (500ms) で abstract 要約を遅延取得
+    let hoverTimer = null;
+    item.addEventListener('mouseenter', () => {
+      if (item.dataset.summaryState) return;
+      clearTimeout(hoverTimer);
+      hoverTimer = setTimeout(() => loadRefSummary(item, bib, key), 500);
+    });
+    item.addEventListener('mouseleave', () => {
+      clearTimeout(hoverTimer);
+    });
+
+    wrap.appendChild(item);
+    addedAny = true;
+  }
+
+  return addedAny ? wrap : null;
+}
+
+async function loadRefSummary(item, bib, key) {
+  if (item.dataset.summaryState) return;
+  item.dataset.summaryState = 'loading';
+
+  const loadingEl = document.createElement('div');
+  loadingEl.className = 'trarxiv-ref-summary loading';
+  loadingEl.textContent = '⏳ 要約取得中...';
+  item.appendChild(loadingEl);
+
+  try {
+    let result = await sendMessage({
+      action: 'refSummary',
+      refKey: key,
+      title: bib.title,
+      authors: bib.authors,
+    });
+
+    if (result?.error === 'NEEDS_PASSWORD') {
+      try {
+        await ensureKeysUnlocked();
+        result = await sendMessage({
+          action: 'refSummary', refKey: key, title: bib.title, authors: bib.authors,
+        });
+      } catch {
+        loadingEl.remove();
+        item.dataset.summaryState = '';
+        return;
+      }
+    }
+
+    if (result?.error) throw new Error(result.error);
+
+    loadingEl.remove();
+    if (result?.summary) {
+      const sumEl = document.createElement('div');
+      sumEl.className = 'trarxiv-ref-summary';
+      sumEl.textContent = result.summary;
+      if (result.s2Url) {
+        const link = document.createElement('a');
+        link.href = result.s2Url;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.className = 'trarxiv-ref-s2link';
+        link.textContent = ' [S2 ↗]';
+        sumEl.appendChild(link);
+      }
+      item.appendChild(sumEl);
+    }
+    item.dataset.summaryState = 'done';
+  } catch (err) {
+    loadingEl.replaceChildren();
+    loadingEl.classList.remove('loading');
+    loadingEl.classList.add('error');
+    loadingEl.textContent = `⚠ ${err.message}`;
+    item.dataset.summaryState = 'error';
+  }
+}
+
 function buildPositioningSection({ label, body }) {
   const div = document.createElement('div');
   div.className = 'trarxiv-positioning-section';
@@ -1631,6 +1824,7 @@ function setupContextListener(provider, paperId, paperTitle, sections) {
           id: s.id, title: s.title,
           text: s.paragraphEls.map(extractText).join('\n')
             .replace(/⟦MATH_\d+⟧/g, '[数式]')
+    .replace(/⟦REF:[^⟧]+⟧/g, '[REF]')
             .slice(0, 1000),
         })),
       });

@@ -9,7 +9,7 @@ import { decryptText }     from './utils/crypto.js';
 import { registerPaper, getLibrary, setPaperSummary, setPaperTags, deletePaper } from './utils/library.js';
 import { saveSiteConfig, getSiteConfig, getAllSiteConfigs, deleteSiteConfig } from './utils/site-configs.js';
 import { validateSiteConfig } from './utils/selector-guard.js';
-import { fetchAuthorInfo, fetchPaperContext } from './utils/semantic-scholar.js';
+import { fetchAuthorInfo, fetchPaperContext, searchPaperByTitle } from './utils/semantic-scholar.js';
 
 const cache   = new CacheManager();
 const tracker = new TokenTracker();
@@ -80,6 +80,7 @@ async function dispatch(msg, tabId) {
     case 'paperBriefing':    return handlePaperBriefing(msg);
     case 'paperPositioning': return handlePaperPositioning(msg);
     case 'getPaperRelated':  return handleGetPaperRelated(msg);
+    case 'refSummary':       return handleRefSummary(msg);
     case 'authorResearch':   return handleAuthorResearch(msg);
     case 'getTokenStats':    return tracker.getStats();
     case 'getTokenBudget':   return handleGetTokenBudget(msg);
@@ -486,8 +487,8 @@ async function translateParagraph(client, model, para, sectionTitle, paperId) {
       role: 'system',
       content:
         '学術論文の翻訳アシスタントです。番号付き英文を同じ番号で日本語に翻訳します。\n' +
-        '⟦MATH_N⟧ 形式のトークン (例: ⟦MATH_0⟧, ⟦MATH_3⟧) は数式プレースホルダーです。' +
-        '翻訳・変形せず、文中の同じ意味的位置に **そのまま** 残してください。',
+        '⟦MATH_N⟧ 形式のトークン (例: ⟦MATH_0⟧) は数式、⟦REF:X⟧ 形式 (例: ⟦REF:1⟧) は文献参照' +
+        'のプレースホルダーです。両方とも翻訳・変形せず、文中の同じ意味的位置に **そのまま** 残してください。',
     },
     {
       role: 'user',
@@ -495,7 +496,7 @@ async function translateParagraph(client, model, para, sectionTitle, paperId) {
         `以下の英文（セクション:「${sectionTitle}」）を番号を維持して日本語に翻訳してください。\n` +
         `【出力ルール】\n` +
         `- 番号付きの翻訳文のみを返す。前置き・説明・原文の繰り返し不要。\n` +
-        `- ⟦MATH_N⟧ トークンは改変せず、自然な位置に保持する (省略・追加禁止)。\n\n` +
+        `- ⟦MATH_N⟧ / ⟦REF:X⟧ トークンは改変せず、自然な位置に保持する (省略・追加禁止)。\n\n` +
         numbered,
     },
   ];
@@ -584,6 +585,65 @@ async function handlePaperBriefing({ paperId, paperTitle, abstract, forceRefresh
 
   const result = { briefing: content };
   await cache.set('brief', paperId, 'briefing', result);
+  return result;
+}
+
+// ─── Reference summary (A14) ─────────────────────────────────────────────────
+// arxiv 論文の参考文献を Semantic Scholar paper search で検索 → abstract を LLM で
+// 短く要約 (1〜2文)。失敗時は要約なしを返す (LLM 幻覚を避けるため fallback しない)。
+async function handleRefSummary({ refKey, title, authors }) {
+  if (!title || typeof title !== 'string') {
+    throw new Error('参考文献のタイトルが取得できませんでした');
+  }
+  // 同じタイトルの ref はキャッシュ共有 (refKey は paper 横断で別なので使わない)
+  const cacheKey = title.toLowerCase().replace(/\s+/g, '_').slice(0, 100);
+  const cached = await cache.get('ref', cacheKey, 'summary');
+  if (cached) return { ...cached, fromCache: true };
+
+  // S2 paper search で abstract 取得
+  let s2Paper = null;
+  try {
+    const papers = await searchPaperByTitle(title, { limit: 1 });
+    s2Paper = papers[0] ?? null;
+  } catch (e) {
+    return { summary: `Semantic Scholar 検索失敗: ${e.message}`, s2Url: null };
+  }
+
+  if (!s2Paper) {
+    const result = { summary: 'Semantic Scholar 上で該当論文が見つかりませんでした', s2Url: null };
+    await cache.set('ref', cacheKey, 'summary', result);
+    return result;
+  }
+
+  if (!s2Paper.abstract) {
+    const result = {
+      summary: 'アブストラクトが Semantic Scholar に登録されていません',
+      s2Url: s2Paper.url ?? null,
+    };
+    await cache.set('ref', cacheKey, 'summary', result);
+    return result;
+  }
+
+  // LLM で要約
+  const config = await loadConfig();
+  const { client, model } = await buildClient(config, 'explain');
+
+  const messages = [
+    { role: 'system', content: '与えられた論文のアブストラクトを日本語で簡潔に要約します。' },
+    {
+      role: 'user',
+      content:
+        `タイトル: ${title}\n\n` +
+        `アブストラクト:\n${s2Paper.abstract.slice(0, 2500)}\n\n` +
+        `上記の論文を日本語で1〜2文で要約してください。前置きや「この論文は」等は不要、要約のみ返してください。`,
+    },
+  ];
+
+  const { content, usage } = await complete(client, messages);
+  await tracker.track(model, usage);
+
+  const result = { summary: content, s2Url: s2Paper.url ?? null };
+  await cache.set('ref', cacheKey, 'summary', result);
   return result;
 }
 

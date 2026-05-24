@@ -98,6 +98,22 @@ export async function fetchAuthorInfo(authorName) {
   return { candidates, topPapers };
 }
 
+// ─── Paper search (A14: ref summary 用) ─────────────────────────────────────
+/**
+ * タイトルで論文検索。abstract を含む fields を要求する。
+ * @param {string} title
+ * @param {{limit?: number}} [opts]
+ */
+export async function searchPaperByTitle(title, { limit = 1 } = {}) {
+  if (!title) throw new Error('検索クエリが空です');
+  const url = new URL(`${BASE}/paper/search`);
+  url.searchParams.set('query', title);
+  url.searchParams.set('limit', String(limit));
+  url.searchParams.set('fields', 'title,abstract,year,authors.name,paperId,url,venue');
+  const data = await s2Fetch(url.toString());
+  return data?.data ?? [];
+}
+
 // ─── Paper context (A11: 位置づけ + 関連論文) ────────────────────────────────
 
 const PAPER_FIELDS = 'title,year,venue,citationCount,authors.name';
