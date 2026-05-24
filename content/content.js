@@ -36,9 +36,11 @@ const PROVIDERS = [
   },
   {
     name: 'arxiv',
-    canHandle: (url) => /arxiv\.org\/html\//i.test(url),
+    // arxiv.org/html と ar5iv (labs.arxiv.org / ar5iv.org の html/abs) は同じ LaTeXML 出力構造 (ltx_*)
+    // なので 1 つのプロバイダーで両方ハンドリングする
+    canHandle: (url) => /(arxiv\.org\/html\/|ar5iv\.(?:labs\.arxiv\.org|org)\/(?:html|abs)\/)/i.test(url),
     getPaperId: (url) => {
-      const m = url.match(/arxiv\.org\/html\/([^/?#]+)/i);
+      const m = url.match(/(?:arxiv\.org\/html\/|ar5iv\.(?:labs\.arxiv\.org|org)\/(?:html|abs)\/)([^/?#]+)/i);
       return m ? m[1].replace(/v\d+$/, '') : null;
     },
     getPaperTitle: () => {

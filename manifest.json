@@ -38,7 +38,12 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://arxiv.org/html/*", "https://arxiv.org/abs/*"],
+      "matches": [
+        "https://arxiv.org/html/*",
+        "https://arxiv.org/abs/*",
+        "https://ar5iv.org/*",
+        "https://ar5iv.labs.arxiv.org/*"
+      ],
       "js": ["content/content.js"],
       "css": ["content/content.css"],
       "run_at": "document_idle"
