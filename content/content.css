@@ -491,3 +491,47 @@
   font-size: 11.5px;
   color: #94a3b8;
 }
+
+/* ── Author research (Semantic Scholar, A10) ─────────────────────────────── */
+.trarxiv-author-top {
+  margin-bottom: 8px;
+}
+.trarxiv-author-name {
+  font-weight: 600;
+  color: #1d4ed8 !important;
+  text-decoration: none !important;
+}
+.trarxiv-author-name:hover { text-decoration: underline !important; }
+.trarxiv-author-affiliations {
+  font-size: 12.5px;
+  color: #475569;
+  margin-top: 2px;
+}
+.trarxiv-author-stats {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 2px;
+}
+.trarxiv-author-homepage {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #1d4ed8 !important;
+}
+.trarxiv-author-papers-hdr,
+.trarxiv-author-alt-hdr {
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  margin: 8px 0 3px;
+}
+.trarxiv-author-papers,
+.trarxiv-author-alt {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 12px;
+  color: #475569;
+  line-height: 1.55;
+}
+.trarxiv-author-papers li,
+.trarxiv-author-alt li { margin: 2px 0; }

@@ -12,6 +12,7 @@
     "https://api.anthropic.com/*",
     "https://openrouter.ai/*",
     "https://generativelanguage.googleapis.com/*",
+    "https://api.semanticscholar.org/*",
     "http://localhost/*",
     "http://127.0.0.1/*"
   ],

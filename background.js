@@ -9,6 +9,7 @@ import { decryptText }     from './utils/crypto.js';
 import { registerPaper, getLibrary, setPaperSummary, setPaperTags, deletePaper } from './utils/library.js';
 import { saveSiteConfig, getSiteConfig, getAllSiteConfigs, deleteSiteConfig } from './utils/site-configs.js';
 import { validateSiteConfig } from './utils/selector-guard.js';
+import { fetchAuthorInfo }   from './utils/semantic-scholar.js';
 
 const cache   = new CacheManager();
 const tracker = new TokenTracker();
@@ -584,37 +585,19 @@ async function handlePaperBriefing({ paperId, paperTitle, abstract, forceRefresh
   return result;
 }
 
-// ─── Author Research ──────────────────────────────────────────────────────────
-async function handleAuthorResearch({ authorName, paperTitle }) {
+// ─── Author Research (Semantic Scholar — no LLM fallback) ────────────────────
+async function handleAuthorResearch({ authorName }) {
   const authorKey = authorName.toLowerCase().replace(/\s+/g, '_');
-  const cached = await cache.get('author', authorKey, 'info');
+  // 'info' (旧 LLM ベース) ではなく 's2' を新 cache key として使い、旧キャッシュを orphan 化
+  const cached = await cache.get('author', authorKey, 's2');
   if (cached) return { ...cached, fromCache: true };
 
-  const config = await loadConfig();
-  const { client, model } = await buildClient(config, 'chat');
+  // Semantic Scholar から構造化データを取得。失敗時はエラーをそのまま投げる
+  // (LLM 学習データからの幻覚で代替しない方針)。
+  const { candidates, topPapers } = await fetchAuthorInfo(authorName);
 
-  const messages = [
-    {
-      role: 'system',
-      content: 'あなたは研究者の経歴調査を支援するアシスタントです。学習データに基づいて簡潔に回答してください。',
-    },
-    {
-      role: 'user',
-      content:
-        `研究者「${authorName}」について教えてください（論文「${paperTitle}」の著者）。\n\n` +
-        `以下の観点で日本語で簡潔にまとめてください（不明な場合は「不明」と記載）：\n` +
-        `- 所属機関・役職\n` +
-        `- 研究分野・専門領域\n` +
-        `- 代表的な研究・主な業績\n\n` +
-        `3〜5文程度でまとめてください。`,
-    },
-  ];
-
-  const { content, usage } = await complete(client, messages);
-  await tracker.track(model, usage);
-
-  const result = { info: content };
-  await cache.set('author', authorKey, 'info', result);
+  const result = { source: 'semantic-scholar', candidates, topPapers };
+  await cache.set('author', authorKey, 's2', result);
   return result;
 }
 

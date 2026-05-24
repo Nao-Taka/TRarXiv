@@ -1200,22 +1200,7 @@ async function runAuthorResearch(authorName, paperId, paperTitle, btn, card) {
 
     if (result.error) throw new Error(result.error);
 
-    card.replaceChildren();
-    const infoEl = document.createElement('span');
-    infoEl.textContent = result.info;
-    card.appendChild(infoEl);
-
-    const note = document.createElement('span');
-    note.className = 'trarxiv-author-note';
-    note.textContent = '※ AIの学習データに基づく情報です。最新情報は公式サイト等でご確認ください。';
-    card.appendChild(note);
-
-    if (result.fromCache) {
-      const badge = document.createElement('span');
-      badge.className = 'trarxiv-cache-badge';
-      badge.textContent = 'キャッシュ';
-      note.appendChild(badge);
-    }
+    renderAuthorCard(card, result);
 
     card.dataset.populated = '1';
     card.style.display = '';
@@ -1236,6 +1221,124 @@ function renderErrorCard(container, message) {
   err.textContent = `⚠ ${message}`;
   container.appendChild(err);
   container.style.display = '';
+}
+
+// ─── Author research card renderer (Semantic Scholar 構造化データ) ───────────
+function renderAuthorCard(card, result) {
+  card.replaceChildren();
+
+  const candidates = Array.isArray(result?.candidates) ? result.candidates : [];
+  const topPapers  = Array.isArray(result?.topPapers)  ? result.topPapers  : [];
+
+  if (candidates.length === 0) {
+    const empty = document.createElement('div');
+    empty.textContent = '該当する著者情報が見つかりませんでした';
+    card.appendChild(empty);
+    return;
+  }
+
+  // ── Top candidate ──
+  const top = candidates[0];
+  const topBlock = document.createElement('div');
+  topBlock.className = 'trarxiv-author-top';
+
+  const nameLink = document.createElement('a');
+  nameLink.className = 'trarxiv-author-name';
+  nameLink.href = top.url ?? `https://www.semanticscholar.org/author/${encodeURIComponent(top.authorId ?? '')}`;
+  nameLink.target = '_blank';
+  nameLink.rel = 'noopener noreferrer';
+  nameLink.textContent = top.name ?? '(no name)';
+  topBlock.appendChild(nameLink);
+
+  if (Array.isArray(top.affiliations) && top.affiliations.length > 0) {
+    const affEl = document.createElement('div');
+    affEl.className = 'trarxiv-author-affiliations';
+    affEl.textContent = top.affiliations.join(' / ');
+    topBlock.appendChild(affEl);
+  }
+
+  const statsEl = document.createElement('div');
+  statsEl.className = 'trarxiv-author-stats';
+  const parts = [];
+  if (top.paperCount != null)     parts.push(`論文数: ${top.paperCount.toLocaleString()}`);
+  if (top.citationCount != null)  parts.push(`被引用: ${top.citationCount.toLocaleString()}`);
+  if (top.hIndex != null)         parts.push(`h-index: ${top.hIndex}`);
+  statsEl.textContent = parts.join(' • ');
+  if (parts.length > 0) topBlock.appendChild(statsEl);
+
+  if (top.homepage) {
+    const hp = document.createElement('a');
+    hp.className = 'trarxiv-author-homepage';
+    hp.href = top.homepage;
+    hp.target = '_blank';
+    hp.rel = 'noopener noreferrer';
+    hp.textContent = '🏠 ホームページ';
+    topBlock.appendChild(hp);
+  }
+
+  card.appendChild(topBlock);
+
+  // ── Top papers ──
+  if (topPapers.length > 0) {
+    const papersHdr = document.createElement('div');
+    papersHdr.className = 'trarxiv-author-papers-hdr';
+    papersHdr.textContent = '代表的な近年の論文';
+    card.appendChild(papersHdr);
+
+    const ul = document.createElement('ul');
+    ul.className = 'trarxiv-author-papers';
+    for (const p of topPapers) {
+      const li = document.createElement('li');
+      const meta = [];
+      if (p.year)  meta.push(p.year);
+      if (p.venue) meta.push(p.venue);
+      if (p.citationCount != null) meta.push(`cited ${p.citationCount}`);
+      const metaStr = meta.length ? ` (${meta.join(', ')})` : '';
+      li.textContent = `${p.title ?? '(no title)'}${metaStr}`;
+      ul.appendChild(li);
+    }
+    card.appendChild(ul);
+  }
+
+  // ── Other candidates ──
+  if (candidates.length > 1) {
+    const altHdr = document.createElement('div');
+    altHdr.className = 'trarxiv-author-alt-hdr';
+    altHdr.textContent = '同名候補';
+    card.appendChild(altHdr);
+
+    const altUl = document.createElement('ul');
+    altUl.className = 'trarxiv-author-alt';
+    for (const c of candidates.slice(1)) {
+      const li = document.createElement('li');
+      const a = document.createElement('a');
+      a.href = c.url ?? `https://www.semanticscholar.org/author/${encodeURIComponent(c.authorId ?? '')}`;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.textContent = c.name ?? '(no name)';
+      li.appendChild(a);
+      const meta = [];
+      if (Array.isArray(c.affiliations) && c.affiliations.length > 0) meta.push(c.affiliations[0]);
+      if (c.paperCount != null) meta.push(`論文 ${c.paperCount}`);
+      if (meta.length > 0) li.append(' — ' + meta.join(', '));
+      altUl.appendChild(li);
+    }
+    card.appendChild(altUl);
+  }
+
+  // ── Footer note ──
+  const note = document.createElement('div');
+  note.className = 'trarxiv-author-note';
+  const noteSpan = document.createElement('span');
+  noteSpan.textContent = '出典: Semantic Scholar (LLMの推測ではなく実データ)';
+  note.appendChild(noteSpan);
+  if (result.fromCache) {
+    const badge = document.createElement('span');
+    badge.className = 'trarxiv-cache-badge';
+    badge.textContent = 'キャッシュ';
+    note.appendChild(badge);
+  }
+  card.appendChild(note);
 }
 
 // ─── Figure analysis ─────────────────────────────────────────────────────────
