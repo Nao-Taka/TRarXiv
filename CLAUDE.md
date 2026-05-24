@@ -55,37 +55,37 @@ options/options.js    # 設定ページ
 
 ### v0.2.0 — Safer & Smarter (進行中)
 
-| # | アクション | 状態 | 編集対象 |
-|---|---|---|---|
-| **A1** | popup XSS 全廃 + CSP明示 | ✅ 完了 | popup.js / content.js / options.js (renderSiteConfigs) / manifest.json |
-| **A2** | `<all_urls>` 撤廃 + ドメイン単位許可 | ⏳ 未着手 | manifest.json / popup.js / background.js |
-| **A3** | 画像 fetch URL検証 (SSRF防止) | ⏳ 未着手 | background.js (handleAnalyzeImage) |
-| **A4** | LLMセレクター検証 | ⏳ 未着手 | 新規 utils/selector-guard.js / background.js / content.js |
-| **A5** | Anthropic 警告バナー | ⏳ 未着手 | options.html / options.css |
-| **A6** | データ管理UI (3段階リセット) | ⏳ 未着手 | options.html / options.css / options.js |
-| **A7** | 数式プレースホルダ復元 (`⟦MATH_N⟧`) | ⏳ 未着手 | content.js / background.js |
+| # | アクション | なぜ | 状態 | 編集対象 |
+|---|---|---|---|---|
+| **A1** | popup XSS 全廃 + CSP明示 | LLM 出力が `innerHTML` 経由で popup/content/options に流入 → スクリプト注入されるリスクを断つ | ✅ 完了 | popup.js / content.js / options.js (renderSiteConfigs) / manifest.json |
+| **A2** | `<all_urls>` 撤廃 + ドメイン単位許可 | 万一の侵害時に銀行など未知サイトで暴走しないよう、optional_host_permissions を狭め、サイト設定削除時に Chrome 権限も revoke する | ⏳ 未着手 | manifest.json / background.js / options.js |
+| **A3** | 画像 fetch URL検証 (SSRF防止) | `handleAnalyzeImage` の `imageUrl` 引数に `127.0.0.1` / `169.254.169.254` (クラウドメタデータ) 等を仕込まれて内部資源が侵害されるのを防ぐ | ⏳ 未着手 | background.js (handleAnalyzeImage) |
+| **A4** | LLMセレクター検証 | プロンプトインジェクションで LLM が `input[type=password]` 等 機微要素を指すセレクターを返すと、その値が「論文本文」として LLM API に**漏出**する。構文/対象範囲を検証 | ⏳ 未着手 | 新規 utils/selector-guard.js / background.js / content.js |
+| **A5** | Anthropic 警告バナー | Anthropic がブラウザ直叩き (`dangerous-direct-browser-access`) を非推奨化。ユーザーに明示 | ⏳ 未着手 | options.html / options.css |
+| **A6** | データ管理UI (3段階リセット) | A1〜A5 以前のコードで保存された侵害リスクのある既存データを段階的にクリアする手段が必要 | ⏳ 未着手 | options.html / options.css / options.js |
+| **A7** | 数式プレースホルダ復元 (`⟦MATH_N⟧`) | 現状 `[数式]` 置換で破棄され、和訳側に数式が出ず読解として不十分 | ⏳ 未着手 | content.js / background.js |
 
 **着手順**: A1 → A6 → A5 → A4 → A2 → A3 → A7
 
 ### v0.3.0 — Wider & Deeper
 
-| # | アクション | 編集対象 |
-|---|---|---|
-| **A8** | arxiv.org/abs ページサポート (a: ar5iv ボタン HTML版なし時 / b: 論文ブリーフィング) | manifest.json / content.js (新プロバイダ + abs ページロジック) |
-| **A9** | T5 第1陣 (bioRxiv, medRxiv, PMC, OpenReview, ACL Anthology) | content.js PROVIDERS / manifest.json |
-| **A10** | Semantic Scholar 著者検索 (**失敗時エラー明示**) | 新規 utils/semantic-scholar.js / background.js |
-| **A11** | 論文の位置づけ + 関連論文 + チャット強化 | background.js / content.js / popup.js |
+| # | アクション | なぜ | 編集対象 |
+|---|---|---|---|
+| **A8** | arxiv.org/abs ページサポート (a: ar5iv ボタン HTML版なし時 / b: 論文ブリーフィング) | やや古い ArXiv 論文は HTML 版リンクがなく PDF 強制 = 翻訳不可。ar5iv 経由のボタンと abs ページでのブリーフィングを提供 | manifest.json / content.js (新プロバイダ + abs ページロジック) |
+| **A9** | T5 第1陣 (bioRxiv, medRxiv, PMC, OpenReview, ACL Anthology) | 対応サイトを増やす。動的解析でも一応動くが、よく使うサイトは静的設定で表現力・安定性を上げたい | content.js PROVIDERS / manifest.json |
+| **A10** | Semantic Scholar 著者検索 (**失敗時エラー明示**) | 現行の著者リサーチは LLM がタイトル等から幻覚を吐く。Web 検索ベースに置換 (失敗時はフォールバックせずエラー明示) | 新規 utils/semantic-scholar.js / background.js |
+| **A11** | 論文の位置づけ + 関連論文 + チャット強化 | 「次に読む論文」「全体の中での位置づけ」を出すことで論文を有機的に評価できるようにする | background.js / content.js / popup.js |
 
 ### v0.4.0 — Reading Companion
 
-| # | アクション | 編集対象 |
-|---|---|---|
-| **A13** | T5 第2陣 (Nature, Cell, eLife, PLOS) | content.js PROVIDERS |
-| **A14** | インライン参考文献注釈 + ホバー詳細 | content.js / background.js / utils/cache.js |
+| # | アクション | なぜ | 編集対象 |
+|---|---|---|---|
+| **A13** | T5 第2陣 (Nature, Cell, eLife, PLOS) | A9 と同じく対応サイト拡大 (動的より静的の方が表現力高い) | content.js PROVIDERS |
+| **A14** | インライン参考文献注釈 + ホバー詳細 | 参考文献にいちいち飛ぶのが面倒。和訳ペア直下に著者/タイトルを常時表示 + ホバーで abstract 要約を出す | content.js / background.js / utils/cache.js |
 
 ### 保留
 
-- **A12** Cloudflare Workers プロキシ対応 (Anthropic キー漏洩の根本対策) — ユーザーが理解できないため将来検討
+- **A12** Cloudflare Workers プロキシ対応 — Anthropic キー漏洩の根本対策だが、ユーザー (=自分) が運用を理解できないため将来検討
 
 ## A1 完了の詳細
 

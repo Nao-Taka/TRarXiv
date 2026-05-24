@@ -50,7 +50,7 @@ async function restoreDynamicContentScripts() {
     try {
       await chrome.scripting.registerContentScripts([{
         id: `dynamic-${cfg.hostname}`,
-        matches: [`*://${cfg.hostname}/*`],
+        matches: [`https://${cfg.hostname}/*`],
         js: ['content/content.js'],
         css: ['content/content.css'],
         runAt: 'document_idle',
@@ -185,7 +185,7 @@ async function handleAnalyzeSite({ url, domSummary }) {
   try {
     await chrome.scripting.registerContentScripts([{
       id: `dynamic-${hostname}`,
-      matches: [`*://${hostname}/*`],
+      matches: [`https://${hostname}/*`],
       js: ['content/content.js'],
       css: ['content/content.css'],
       runAt: 'document_idle',
@@ -207,6 +207,11 @@ async function handleDeleteSiteConfig(hostname) {
   } catch {
     // Script not registered — ignore
   }
+  try {
+    await chrome.permissions.remove({ origins: [`https://${hostname}/*`] });
+  } catch {
+    // Permission may have been granted via a broader pattern — ignore
+  }
   return { success: true };
 }
 
@@ -214,7 +219,7 @@ async function handleRegisterContentScript(hostname) {
   try {
     await chrome.scripting.registerContentScripts([{
       id: `dynamic-${hostname}`,
-      matches: [`*://${hostname}/*`],
+      matches: [`https://${hostname}/*`],
       js: ['content/content.js'],
       css: ['content/content.css'],
       runAt: 'document_idle',

@@ -229,7 +229,7 @@ async function onAnalysisSuccess(config, statusEl, resultEl, hostname) {
 async function showPostConfigUI(hostname, config) {
   // Check host permission
   const hasPerm = await chrome.permissions.contains({
-    origins: [`*://${hostname}/*`],
+    origins: [`https://${hostname}/*`],
   }).catch(() => false);
 
   const permBanner   = document.getElementById('site-perm-banner');
@@ -242,7 +242,7 @@ async function showPostConfigUI(hostname, config) {
     grantBtn.onclick = async () => {
       try {
         const granted = await chrome.permissions.request({
-          origins: [`*://${hostname}/*`],
+          origins: [`https://${hostname}/*`],
         });
         if (granted) {
           permBanner.style.display = 'none';

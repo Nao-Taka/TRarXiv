@@ -5,7 +5,7 @@
   "description": "ArXiv論文の翻訳・解説支援Chrome拡張 (ArXiv HTML対応)",
   "permissions": ["storage", "activeTab", "scripting"],
   "optional_permissions": ["tabs"],
-  "optional_host_permissions": ["<all_urls>"],
+  "optional_host_permissions": ["https://*/*"],
   "host_permissions": [
     "https://arxiv.org/*",
     "https://api.openai.com/*",
