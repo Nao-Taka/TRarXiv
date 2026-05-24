@@ -58,14 +58,15 @@ options/options.js    # 設定ページ
 | # | アクション | なぜ | 状態 | 編集対象 |
 |---|---|---|---|---|
 | **A1** | popup XSS 全廃 + CSP明示 | LLM 出力が `innerHTML` 経由で popup/content/options に流入 → スクリプト注入されるリスクを断つ | ✅ 完了 | popup.js / content.js / options.js (renderSiteConfigs) / manifest.json |
-| **A2** | `<all_urls>` 撤廃 + ドメイン単位許可 | 万一の侵害時に銀行など未知サイトで暴走しないよう、optional_host_permissions を狭め、サイト設定削除時に Chrome 権限も revoke する | ⏳ 未着手 | manifest.json / background.js / options.js |
-| **A3** | 画像 fetch URL検証 (SSRF防止) | `handleAnalyzeImage` の `imageUrl` 引数に `127.0.0.1` / `169.254.169.254` (クラウドメタデータ) 等を仕込まれて内部資源が侵害されるのを防ぐ | ⏳ 未着手 | background.js (handleAnalyzeImage) |
-| **A4** | LLMセレクター検証 | プロンプトインジェクションで LLM が `input[type=password]` 等 機微要素を指すセレクターを返すと、その値が「論文本文」として LLM API に**漏出**する。構文/対象範囲を検証 | ⏳ 未着手 | 新規 utils/selector-guard.js / background.js / content.js |
-| **A5** | Anthropic 警告バナー | Anthropic がブラウザ直叩き (`dangerous-direct-browser-access`) を非推奨化。ユーザーに明示 | ⏳ 未着手 | options.html / options.css |
+| **A2** | `<all_urls>` 撤廃 + ドメイン単位許可 | 万一の侵害時に銀行など未知サイトで暴走しないよう、optional_host_permissions を狭め、サイト設定削除時に Chrome 権限も revoke する | ✅ 完了 | manifest.json / background.js / popup.js |
+| **A3** | 画像 fetch URL検証 (SSRF防止) | `handleAnalyzeImage` の `imageUrl` 引数に `127.0.0.1` / `169.254.169.254` (クラウドメタデータ) 等を仕込まれて内部資源が侵害されるのを防ぐ | ✅ 完了 | background.js (handleAnalyzeImage) |
+| **A4** | LLMセレクター検証 | プロンプトインジェクションで LLM が `input[type=password]` 等 機微要素を指すセレクターを返すと、その値が「論文本文」として LLM API に**漏出**する。構文/対象範囲を検証 | ✅ 完了 | 新規 utils/selector-guard.js / background.js / content.js |
+| **A5** | Anthropic 警告バナー | Anthropic がブラウザ直叩き (`dangerous-direct-browser-access`) を非推奨化。ユーザーに明示 | ✅ 完了 | options.html |
 | **A6** | データ管理UI (3段階リセット) | A1〜A5 以前のコードで保存された侵害リスクのある既存データを段階的にクリアする手段が必要 | ⏳ 未着手 | options.html / options.css / options.js |
 | **A7** | 数式プレースホルダ復元 (`⟦MATH_N⟧`) | 現状 `[数式]` 置換で破棄され、和訳側に数式が出ず読解として不十分 | ⏳ 未着手 | content.js / background.js |
 
-**着手順**: A1 → A6 → A5 → A4 → A2 → A3 → A7
+**着手順**: A1 → A2 → A3 → A4 → A5 → (次) **A6** → A7
+(当初は A6 を先に予定していたが、セキュリティ系 A2-A5 を一括処理した経緯)
 
 ### v0.3.0 — Wider & Deeper
 
