@@ -9,7 +9,7 @@ import { decryptText }     from './utils/crypto.js';
 import { registerPaper, getLibrary, setPaperSummary, setPaperTags, deletePaper } from './utils/library.js';
 import { saveSiteConfig, getSiteConfig, getAllSiteConfigs, deleteSiteConfig } from './utils/site-configs.js';
 import { validateSiteConfig } from './utils/selector-guard.js';
-import { fetchAuthorInfo, fetchPaperContext, searchPaperByTitle } from './utils/semantic-scholar.js';
+import { fetchAuthorInfo, fetchPaperContext, searchPaperByTitle, getAuthorPapers } from './utils/semantic-scholar.js';
 
 const cache   = new CacheManager();
 const tracker = new TokenTracker();
@@ -82,6 +82,8 @@ async function dispatch(msg, tabId) {
     case 'getPaperRelated':  return handleGetPaperRelated(msg);
     case 'refSummary':       return handleRefSummary(msg);
     case 'authorResearch':   return handleAuthorResearch(msg);
+    case 'authorAnalysis':   return handleAuthorAnalysis(msg);
+    case 'authorChoice':     return handleAuthorChoice(msg);
     case 'getTokenStats':    return tracker.getStats();
     case 'getTokenBudget':   return handleGetTokenBudget(msg);
     case 'clearCache':       return cache.clear();
@@ -730,19 +732,161 @@ async function handlePaperPositioning({ paperId, paperTitle, abstract, forceRefr
 }
 
 // ─── Author Research (Semantic Scholar — no LLM fallback) ────────────────────
-async function handleAuthorResearch({ authorName }) {
+// 同名著者の判別のため、現論文 (paperId が arXiv ID) の分野との関連度を計算する。
+// ユーザーが「合ってる/違う」を選んだ結果は chrome.storage.local に保存され、
+// 次回は確定した authorId のみを返す。
+
+const AUTHORCHOICE_PREFIX = 'trarxiv:authorchoice:';
+
+function authorChoiceKey(paperId, authorName) {
+  return AUTHORCHOICE_PREFIX + `${paperId}::${authorName.toLowerCase()}`;
+}
+
+async function loadAuthorChoice(paperId, authorName) {
+  if (!paperId || !authorName) return null;
+  const k = authorChoiceKey(paperId, authorName);
+  return new Promise(resolve =>
+    chrome.storage.local.get(k, r => resolve(r[k] ?? null))
+  );
+}
+
+async function saveAuthorChoice(paperId, authorName, choice) {
+  const k = authorChoiceKey(paperId, authorName);
+  return new Promise(resolve =>
+    chrome.storage.local.set({ [k]: choice }, resolve)
+  );
+}
+
+async function handleAuthorResearch({ authorName, paperId }) {
   const authorKey = authorName.toLowerCase().replace(/\s+/g, '_');
-  // 'info' (旧 LLM ベース) ではなく 's2' を新 cache key として使い、旧キャッシュを orphan 化
-  const cached = await cache.get('author', authorKey, 's2');
+  // paperId が arxiv 形式なら関連度計算用に渡す
+  const arxivLike = paperId && (/^\d{4}\.\d{4,5}$/.test(paperId) || /^[a-z-]+(\.[A-Z]{2})?\/\d{7}$/i.test(paperId));
+  const currentArxivId = arxivLike ? paperId : null;
+
+  // 確定済み choice があれば、その候補のみを返す
+  const choice = await loadAuthorChoice(paperId, authorName);
+
+  // キャッシュキーに paperId/choice を含めて、同名でも別論文で別結果を保てるように
+  const cacheSubkey = `s2::${currentArxivId ?? 'none'}::${choice?.authorId ?? 'none'}`;
+  const cached = await cache.get('author', authorKey, cacheSubkey);
+  if (cached) return { ...cached, fromCache: true, choice };
+
+  let result;
+  if (choice?.authorId) {
+    // 確定済み: その authorId だけ詳細取得
+    let topPapers = [];
+    try {
+      topPapers = await getAuthorPapers(choice.authorId, { limit: 5 });
+    } catch (e) {
+      console.warn('[TrArXiv] confirmed-author getAuthorPapers failed:', e?.message);
+    }
+    result = {
+      source: 'semantic-scholar',
+      candidates: [{
+        ...choice.snapshot,
+        topPapers,
+        fields: [],
+        relevanceScore: 1,
+        matchedFields: [],
+      }],
+      currentPaperFields: [],
+      confirmed: true,
+    };
+  } else {
+    // 通常: 候補列挙 + 関連度計算
+    const { candidates, currentPaperFields } = await fetchAuthorInfo(authorName, { currentArxivId });
+    result = { source: 'semantic-scholar', candidates, currentPaperFields };
+  }
+
+  await cache.set('author', authorKey, cacheSubkey, result);
+  return { ...result, choice };
+}
+
+// 候補に対する LLM 分析 (代表論文ごとの1行要約 + 著者全体の研究スタンス)。
+// ユーザーが「詳しく見る」を押した時だけ呼ばれる遅延ロード。
+async function handleAuthorAnalysis({ authorId, authorName, topPapers }) {
+  if (!authorId) throw new Error('authorId が指定されていません');
+  const cacheKey = authorId;
+  const cached = await cache.get('authoranalysis', cacheKey, 'main');
   if (cached) return { ...cached, fromCache: true };
 
-  // Semantic Scholar から構造化データを取得。失敗時はエラーをそのまま投げる
-  // (LLM 学習データからの幻覚で代替しない方針)。
-  const { candidates, topPapers } = await fetchAuthorInfo(authorName);
+  // abstract が無いと要約できないので abstract 付きで再取得 (初回時)
+  let papersForLlm = topPapers ?? [];
+  const needsAbstract = papersForLlm.some(p => !p.abstract);
+  if (needsAbstract) {
+    try {
+      papersForLlm = await getAuthorPapers(authorId, { limit: 5, withAbstract: true });
+    } catch (e) {
+      // 失敗時は abstract 無しで進める
+    }
+  }
 
-  const result = { source: 'semantic-scholar', candidates, topPapers };
-  await cache.set('author', authorKey, 's2', result);
+  const papersText = papersForLlm.slice(0, 5).map((p, i) =>
+    `${i + 1}. ${p.title ?? '(no title)'} (${p.year ?? '?'}, ${p.venue ?? ''})\n` +
+    `   ${p.abstract ? p.abstract.slice(0, 500) : '(abstract 未登録)'}`
+  ).join('\n\n');
+
+  const config = await loadConfig();
+  const { client, model } = await buildClient(config, 'explain');
+
+  const messages = [
+    {
+      role: 'system',
+      content: '研究者の代表論文を分析し、日本語で簡潔にまとめます。出力はラベル形式の構造化テキスト。',
+    },
+    {
+      role: 'user',
+      content:
+        `研究者「${authorName ?? '?'}」の代表論文 (最大5本、Semantic Scholar より):\n\n${papersText}\n\n` +
+        `以下の形式で **日本語** で答えてください。前置きや結びは不要、ラベルから始めてください:\n\n` +
+        `【各論文の1行要約】\n` +
+        `1. (1文の要約)\n` +
+        `2. (1文の要約)\n` +
+        `...\n\n` +
+        `【研究スタンス】\n` +
+        `(この研究者の研究領域・アプローチ・主な関心を 1〜2文で)`,
+    },
+  ];
+
+  const { content, usage } = await complete(client, messages);
+  await tracker.track(model, usage);
+
+  const result = { analysis: content };
+  await cache.set('authoranalysis', cacheKey, 'main', result);
   return result;
+}
+
+async function handleAuthorChoice({ paperId, authorName, action, candidate }) {
+  // action: 'confirm' = この人で正しい / 'dismiss' = 違う (cache から外す)
+  if (!paperId || !authorName) throw new Error('paperId / authorName が必要です');
+
+  if (action === 'confirm' && candidate?.authorId) {
+    await saveAuthorChoice(paperId, authorName, {
+      authorId: candidate.authorId,
+      savedAt: Date.now(),
+      snapshot: {
+        name: candidate.name,
+        authorId: candidate.authorId,
+        affiliations: candidate.affiliations,
+        paperCount: candidate.paperCount,
+        citationCount: candidate.citationCount,
+        hIndex: candidate.hIndex,
+        homepage: candidate.homepage,
+        url: candidate.url,
+      },
+    });
+    // 確定したので関連の author キャッシュをすべて invalidate (新しい cacheSubkey に切り替わる)
+    return { success: true, action: 'confirmed' };
+  }
+
+  if (action === 'dismiss') {
+    // 「違う」を選んだ場合は確定情報を削除して、再度候補を見せる
+    const k = authorChoiceKey(paperId, authorName);
+    await new Promise(resolve => chrome.storage.local.remove(k, resolve));
+    return { success: true, action: 'dismissed' };
+  }
+
+  throw new Error(`未知の action: ${action}`);
 }
 
 // ─── Chat ─────────────────────────────────────────────────────────────────────

@@ -692,3 +692,145 @@
 .trarxiv-author-card-wrap {
   margin-left: 18px;
 }
+
+/* ── Author research card v2 (A10 拡張) ────────────────────────────────── */
+.trarxiv-author-context {
+  font-size: 11.5px;
+  color: #64748b;
+  margin-bottom: 6px;
+  font-style: italic;
+}
+.trarxiv-author-confirmed {
+  background: #ecfdf5;
+  color: #047857;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  margin-bottom: 6px;
+  display: inline-block;
+}
+.trarxiv-author-dismiss-confirmed {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fcd34d;
+  padding: 2px 8px;
+  font-size: 11.5px;
+  margin-left: 8px;
+}
+.trarxiv-author-candidate {
+  padding: 8px 10px;
+  margin: 6px 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #ffffff;
+}
+.trarxiv-author-candidate.top {
+  border-color: #93c5fd;
+  background: #f0f9ff;
+}
+.trarxiv-author-cand-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.trarxiv-author-rank {
+  font-size: 11px;
+  color: #94a3b8;
+  font-weight: 600;
+}
+.trarxiv-author-name-link {
+  font-weight: 600;
+  color: #1d4ed8 !important;
+  text-decoration: none !important;
+}
+.trarxiv-author-name-link:hover { text-decoration: underline !important; }
+.trarxiv-author-relevance {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+.trarxiv-author-relevance.high { background: #dcfce7; color: #166534; }
+.trarxiv-author-relevance.mid { background: #fef3c7; color: #92400e; }
+.trarxiv-author-relevance.low { background: #f1f5f9; color: #64748b; }
+.trarxiv-author-aff {
+  font-size: 12px;
+  color: #475569;
+  margin-top: 3px;
+}
+.trarxiv-author-cand-stats {
+  font-size: 11.5px;
+  color: #64748b;
+  margin-top: 2px;
+}
+.trarxiv-author-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 5px;
+}
+.trarxiv-author-field-badge {
+  font-size: 10.5px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  background: #f1f5f9;
+  color: #475569;
+}
+.trarxiv-author-field-badge.matched {
+  background: #dbeafe;
+  color: #1e40af;
+  font-weight: 600;
+}
+.trarxiv-author-cand-papers-hdr {
+  font-size: 11px;
+  font-weight: 600;
+  color: #334155;
+  margin: 6px 0 2px;
+}
+.trarxiv-author-cand-papers {
+  margin: 0;
+  padding-left: 16px;
+  font-size: 11.5px;
+  color: #475569;
+  line-height: 1.5;
+}
+.trarxiv-author-cand-papers li { margin: 1px 0; }
+.trarxiv-author-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+.trarxiv-author-analyze,
+.trarxiv-author-confirm,
+.trarxiv-author-dismiss {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  border: 1px solid #cbd5e1;
+}
+.trarxiv-author-analyze { background: #f8fafc; color: #4338ca; }
+.trarxiv-author-analyze:hover:not(:disabled) { background: #eff6ff; }
+.trarxiv-author-confirm { background: #ecfdf5; color: #047857; border-color: #86efac; }
+.trarxiv-author-confirm:hover { background: #d1fae5; }
+.trarxiv-author-dismiss { background: #fef2f2; color: #991b1b; border-color: #fecaca; }
+.trarxiv-author-dismiss:hover { background: #fee2e2; }
+.trarxiv-author-analysis-holder { margin-top: 4px; }
+.trarxiv-author-analysis {
+  margin-top: 4px;
+  padding: 6px 10px;
+  background: #f5f3ff;
+  border-left: 2px solid #c4b5fd;
+  border-radius: 0 4px 4px 0;
+  font-size: 11.5px;
+  color: #3730a3;
+  white-space: pre-line;
+  line-height: 1.55;
+}
+.trarxiv-author-analysis.error {
+  background: #fef2f2;
+  border-left-color: #fca5a5;
+  color: #991b1b;
+}

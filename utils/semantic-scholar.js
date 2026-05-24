@@ -56,12 +56,15 @@ export async function searchAuthor(name, { limit = 3 } = {}) {
  * @param {{limit?: number}} [opts]
  * @returns {Promise<Array>} papers 配列
  */
-export async function getAuthorPapers(authorId, { limit = 5 } = {}) {
+export async function getAuthorPapers(authorId, { limit = 5, withAbstract = false } = {}) {
   if (!authorId) throw new Error('著者IDが指定されていません');
 
   const url = new URL(`${BASE}/author/${encodeURIComponent(authorId)}/papers`);
   url.searchParams.set('limit', String(limit));
-  url.searchParams.set('fields', 'title,year,venue,citationCount');
+  // s2FieldsOfStudy: S2 が自動分類した分野ラベル (Computer Science, Biology, ...)
+  const fields = ['title', 'year', 'venue', 'citationCount', 'externalIds', 's2FieldsOfStudy'];
+  if (withAbstract) fields.push('abstract');
+  url.searchParams.set('fields', fields.join(','));
 
   const res = await fetch(url.toString(), { headers: { 'Accept': 'application/json' } });
   if (!res.ok) throw new Error(`Semantic Scholar API (papers) エラー (HTTP ${res.status})`);
@@ -74,28 +77,102 @@ export async function getAuthorPapers(authorId, { limit = 5 } = {}) {
 }
 
 /**
- * 著者情報を一括取得 (検索 + 最良マッチの papers)。
- * 戻り値は content.js で構造的に描画する想定。
+ * arXiv ID から現在見ている論文の s2FieldsOfStudy を取得。同名著者の関連度算出に使う。
+ * (getPaperByArxivId は A11 用に既存。フィールドだけ拾うラッパー)
+ *
+ * @param {string} arxivId
+ * @returns {Promise<string[]>} S2 が分類した分野カテゴリ ('Computer Science' 等)
+ */
+export async function getPaperFieldsOfStudy(arxivId) {
+  if (!arxivId) return [];
+  const url = new URL(`${BASE}/paper/arXiv:${arxivId}`);
+  url.searchParams.set('fields', 's2FieldsOfStudy,fieldsOfStudy');
+  try {
+    const data = await s2Fetch(url.toString());
+    const s2 = Array.isArray(data?.s2FieldsOfStudy)
+      ? data.s2FieldsOfStudy.map(f => f.category).filter(Boolean)
+      : [];
+    const fos = Array.isArray(data?.fieldsOfStudy) ? data.fieldsOfStudy : [];
+    // 重複を除いて統合
+    return [...new Set([...s2, ...fos])];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * 著者情報を一括取得 (検索 + 各候補の代表論文 + 関連度スコア)。
+ *
+ * 関連度: 候補の論文の s2FieldsOfStudy 集合と、現論文の s2FieldsOfStudy との
+ * Jaccard 類似度 [0, 1]。 currentArxivId が無いと 0。
  *
  * @param {string} authorName
+ * @param {{currentArxivId?: string}} [opts]
  * @returns {Promise<{
- *   candidates: Array<{name, affiliations, paperCount, citationCount, hIndex, homepage, url, authorId}>,
- *   topPapers: Array<{title, year, venue, citationCount}>,
+ *   candidates: Array<{
+ *     name, authorId, affiliations, paperCount, citationCount, hIndex, homepage, url,
+ *     topPapers: Array<{title, year, venue, citationCount, s2FieldsOfStudy, externalIds}>,
+ *     fields: Array<{field: string, count: number}>,
+ *     relevanceScore: number,
+ *     matchedFields: string[],
+ *   }>,
+ *   currentPaperFields: string[],
  * }>}
  */
-export async function fetchAuthorInfo(authorName) {
+export async function fetchAuthorInfo(authorName, { currentArxivId } = {}) {
   const candidates = await searchAuthor(authorName, { limit: 3 });
-  const top = candidates[0];
-  let topPapers = [];
-  if (top?.authorId) {
-    try {
-      topPapers = await getAuthorPapers(top.authorId, { limit: 5 });
-    } catch (e) {
-      // 論文一覧取得失敗は致命的ではない (候補情報だけでも返す)
-      console.warn('[TrArXiv] getAuthorPapers failed:', e?.message);
+
+  // 現論文の分野 (関連度計算用)
+  const currentPaperFields = currentArxivId
+    ? await getPaperFieldsOfStudy(currentArxivId)
+    : [];
+  const currentSet = new Set(currentPaperFields);
+
+  // 各候補について代表論文を取得 (並列)
+  const enriched = await Promise.all(candidates.map(async c => {
+    let topPapers = [];
+    if (c.authorId) {
+      try {
+        topPapers = await getAuthorPapers(c.authorId, { limit: 5 });
+      } catch (e) {
+        console.warn('[TrArXiv] getAuthorPapers failed for', c.authorId, e?.message);
+      }
     }
-  }
-  return { candidates, topPapers };
+
+    // 分野集計
+    const fieldCount = new Map();
+    for (const p of topPapers) {
+      for (const f of (p.s2FieldsOfStudy ?? [])) {
+        const cat = f.category;
+        if (cat) fieldCount.set(cat, (fieldCount.get(cat) ?? 0) + 1);
+      }
+    }
+    const fields = [...fieldCount.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([field, count]) => ({ field, count }));
+
+    // Jaccard 類似度
+    const candidateSet = new Set(fields.map(f => f.field));
+    const matched = [...currentSet].filter(f => candidateSet.has(f));
+    const union = new Set([...candidateSet, ...currentSet]);
+    const relevanceScore = union.size > 0 ? matched.length / union.size : 0;
+
+    return {
+      ...c,
+      topPapers,
+      fields,
+      relevanceScore,
+      matchedFields: matched,
+    };
+  }));
+
+  // 関連度順 → h-index 順で並び替え
+  enriched.sort((a, b) => {
+    if (b.relevanceScore !== a.relevanceScore) return b.relevanceScore - a.relevanceScore;
+    return (b.hIndex ?? 0) - (a.hIndex ?? 0);
+  });
+
+  return { candidates: enriched, currentPaperFields };
 }
 
 // ─── Paper search (A14: ref summary 用) ─────────────────────────────────────

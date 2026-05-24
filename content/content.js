@@ -1629,7 +1629,7 @@ async function runAuthorResearch(authorName, paperId, paperTitle, btn, card) {
   btn.appendChild(spinEl);
 
   try {
-    const msg = { action: 'authorResearch', authorName, paperTitle };
+    const msg = { action: 'authorResearch', authorName, paperTitle, paperId };
     let result = await sendMessage(msg);
 
     if (result.error === 'NEEDS_PASSWORD') {
@@ -1638,22 +1638,24 @@ async function runAuthorResearch(authorName, paperId, paperTitle, btn, card) {
         result = await sendMessage(msg);
       } catch {
         btn.disabled = false;
-        btn.textContent = '🔍 調べる';
+        btn.textContent = '🔍';
         return;
       }
     }
 
     if (result.error) throw new Error(result.error);
 
-    renderAuthorCard(card, result);
+    renderAuthorCard(card, result, { authorName, paperId });
 
     card.dataset.populated = '1';
     card.style.display = '';
     btn.disabled = false;
-    btn.textContent = '✕ 閉じる';
+    btn.textContent = '✕';
+    btn.title = '閉じる';
   } catch (err) {
     btn.disabled = false;
-    btn.textContent = '🔍 調べる';
+    btn.textContent = '🔍';
+    btn.title = `${authorName} を調べる`;
     renderErrorCard(card, err.message);
     setTimeout(() => { card.style.display = 'none'; card.replaceChildren(); }, 6000);
   }
@@ -1669,11 +1671,13 @@ function renderErrorCard(container, message) {
 }
 
 // ─── Author research card renderer (Semantic Scholar 構造化データ) ───────────
-function renderAuthorCard(card, result) {
+// A10 拡張: 候補ごとに分野バッジ + 関連度 + 代表論文 + ✓/✗ 選択ボタン +
+// 「詳しく見る」で LLM 分析の遅延ロード
+function renderAuthorCard(card, result, ctx) {
   card.replaceChildren();
-
   const candidates = Array.isArray(result?.candidates) ? result.candidates : [];
-  const topPapers  = Array.isArray(result?.topPapers)  ? result.topPapers  : [];
+  const currentPaperFields = result?.currentPaperFields ?? [];
+  const confirmed = !!result?.confirmed;
 
   if (candidates.length === 0) {
     const empty = document.createElement('div');
@@ -1682,96 +1686,200 @@ function renderAuthorCard(card, result) {
     return;
   }
 
-  // ── Top candidate ──
-  const top = candidates[0];
-  const topBlock = document.createElement('div');
-  topBlock.className = 'trarxiv-author-top';
-
-  const nameLink = document.createElement('a');
-  nameLink.className = 'trarxiv-author-name';
-  nameLink.href = top.url ?? `https://www.semanticscholar.org/author/${encodeURIComponent(top.authorId ?? '')}`;
-  nameLink.target = '_blank';
-  nameLink.rel = 'noopener noreferrer';
-  nameLink.textContent = top.name ?? '(no name)';
-  topBlock.appendChild(nameLink);
-
-  if (Array.isArray(top.affiliations) && top.affiliations.length > 0) {
-    const affEl = document.createElement('div');
-    affEl.className = 'trarxiv-author-affiliations';
-    affEl.textContent = top.affiliations.join(' / ');
-    topBlock.appendChild(affEl);
+  // ── 現論文の分野ヘッダ (関連度の根拠) ──
+  if (currentPaperFields.length > 0 && !confirmed) {
+    const hdr = document.createElement('div');
+    hdr.className = 'trarxiv-author-context';
+    hdr.textContent = `現論文の分野: ${currentPaperFields.join(', ')}`;
+    card.appendChild(hdr);
   }
 
-  const statsEl = document.createElement('div');
-  statsEl.className = 'trarxiv-author-stats';
-  const parts = [];
-  if (top.paperCount != null)     parts.push(`論文数: ${top.paperCount.toLocaleString()}`);
-  if (top.citationCount != null)  parts.push(`被引用: ${top.citationCount.toLocaleString()}`);
-  if (top.hIndex != null)         parts.push(`h-index: ${top.hIndex}`);
-  statsEl.textContent = parts.join(' • ');
-  if (parts.length > 0) topBlock.appendChild(statsEl);
+  // ── 確定済みなら 1 件だけ、それ以外は候補リスト ──
+  if (confirmed) {
+    const confirmedBanner = document.createElement('div');
+    confirmedBanner.className = 'trarxiv-author-confirmed';
+    confirmedBanner.textContent = '✓ あなたが確定した候補です';
+    card.appendChild(confirmedBanner);
 
-  if (top.homepage) {
-    const hp = document.createElement('a');
-    hp.className = 'trarxiv-author-homepage';
-    hp.href = top.homepage;
-    hp.target = '_blank';
-    hp.rel = 'noopener noreferrer';
-    hp.textContent = '🏠 ホームページ';
-    topBlock.appendChild(hp);
+    const dismissBtn = document.createElement('button');
+    dismissBtn.className = 'trarxiv-btn trarxiv-author-dismiss-confirmed';
+    dismissBtn.textContent = '↻ 候補を再選択';
+    dismissBtn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      await sendMessage({ action: 'authorChoice', paperId: ctx.paperId, authorName: ctx.authorName, action: 'dismiss' });
+      // カードを閉じてキャッシュも消えるよう dataset をクリア
+      card.replaceChildren();
+      card.dataset.populated = '';
+      card.style.display = 'none';
+      const item = card.closest('.trarxiv-author-item, .trarxiv-author-card-wrap');
+      const btnEl = item?.querySelector('.trarxiv-author-btn');
+      if (btnEl) {
+        btnEl.textContent = '🔍';
+        btnEl.title = `${ctx.authorName} を調べる`;
+      }
+    });
+    card.appendChild(dismissBtn);
   }
 
-  card.appendChild(topBlock);
+  // ── 候補一覧 ──
+  candidates.forEach((c, i) => {
+    const block = document.createElement('div');
+    block.className = 'trarxiv-author-candidate';
+    if (i === 0 && !confirmed) block.classList.add('top');
 
-  // ── Top papers ──
-  if (topPapers.length > 0) {
-    const papersHdr = document.createElement('div');
-    papersHdr.className = 'trarxiv-author-papers-hdr';
-    papersHdr.textContent = '代表的な近年の論文';
-    card.appendChild(papersHdr);
-
-    const ul = document.createElement('ul');
-    ul.className = 'trarxiv-author-papers';
-    for (const p of topPapers) {
-      const li = document.createElement('li');
-      const meta = [];
-      if (p.year)  meta.push(p.year);
-      if (p.venue) meta.push(p.venue);
-      if (p.citationCount != null) meta.push(`cited ${p.citationCount}`);
-      const metaStr = meta.length ? ` (${meta.join(', ')})` : '';
-      li.textContent = `${p.title ?? '(no title)'}${metaStr}`;
-      ul.appendChild(li);
+    // 名前 + ランク
+    const head = document.createElement('div');
+    head.className = 'trarxiv-author-cand-head';
+    if (!confirmed && candidates.length > 1) {
+      const rank = document.createElement('span');
+      rank.className = 'trarxiv-author-rank';
+      rank.textContent = `#${i + 1}`;
+      head.appendChild(rank);
     }
-    card.appendChild(ul);
-  }
+    const nameLink = document.createElement('a');
+    nameLink.className = 'trarxiv-author-name-link';
+    nameLink.href = c.url ?? `https://www.semanticscholar.org/author/${encodeURIComponent(c.authorId ?? '')}`;
+    nameLink.target = '_blank';
+    nameLink.rel = 'noopener noreferrer';
+    nameLink.textContent = c.name ?? '(no name)';
+    head.appendChild(nameLink);
 
-  // ── Other candidates ──
-  if (candidates.length > 1) {
-    const altHdr = document.createElement('div');
-    altHdr.className = 'trarxiv-author-alt-hdr';
-    altHdr.textContent = '同名候補';
-    card.appendChild(altHdr);
-
-    const altUl = document.createElement('ul');
-    altUl.className = 'trarxiv-author-alt';
-    for (const c of candidates.slice(1)) {
-      const li = document.createElement('li');
-      const a = document.createElement('a');
-      a.href = c.url ?? `https://www.semanticscholar.org/author/${encodeURIComponent(c.authorId ?? '')}`;
-      a.target = '_blank';
-      a.rel = 'noopener noreferrer';
-      a.textContent = c.name ?? '(no name)';
-      li.appendChild(a);
-      const meta = [];
-      if (Array.isArray(c.affiliations) && c.affiliations.length > 0) meta.push(c.affiliations[0]);
-      if (c.paperCount != null) meta.push(`論文 ${c.paperCount}`);
-      if (meta.length > 0) li.append(' — ' + meta.join(', '));
-      altUl.appendChild(li);
+    // 関連度バッジ
+    if (!confirmed && currentPaperFields.length > 0) {
+      const rel = document.createElement('span');
+      const pct = Math.round((c.relevanceScore ?? 0) * 100);
+      let cls = 'low';
+      if (pct >= 50) cls = 'high';
+      else if (pct >= 20) cls = 'mid';
+      rel.className = `trarxiv-author-relevance ${cls}`;
+      rel.textContent = `関連度 ${pct}%`;
+      if (Array.isArray(c.matchedFields) && c.matchedFields.length > 0) {
+        rel.title = `一致: ${c.matchedFields.join(', ')}`;
+      }
+      head.appendChild(rel);
     }
-    card.appendChild(altUl);
-  }
+    block.appendChild(head);
 
-  // ── Footer note ──
+    // 所属
+    if (Array.isArray(c.affiliations) && c.affiliations.length > 0) {
+      const aff = document.createElement('div');
+      aff.className = 'trarxiv-author-aff';
+      aff.textContent = c.affiliations.join(' / ');
+      block.appendChild(aff);
+    }
+
+    // 統計
+    const stats = [];
+    if (c.paperCount != null)     stats.push(`論文 ${c.paperCount.toLocaleString()}`);
+    if (c.citationCount != null)  stats.push(`被引用 ${c.citationCount.toLocaleString()}`);
+    if (c.hIndex != null)         stats.push(`h-index ${c.hIndex}`);
+    if (stats.length > 0) {
+      const s = document.createElement('div');
+      s.className = 'trarxiv-author-cand-stats';
+      s.textContent = stats.join(' • ');
+      block.appendChild(s);
+    }
+
+    // 分野バッジ
+    if (Array.isArray(c.fields) && c.fields.length > 0) {
+      const fieldsRow = document.createElement('div');
+      fieldsRow.className = 'trarxiv-author-fields';
+      for (const f of c.fields.slice(0, 5)) {
+        const badge = document.createElement('span');
+        badge.className = 'trarxiv-author-field-badge';
+        if (currentPaperFields.includes(f.field)) badge.classList.add('matched');
+        badge.textContent = `${f.field} (${f.count})`;
+        fieldsRow.appendChild(badge);
+      }
+      block.appendChild(fieldsRow);
+    }
+
+    // 代表論文 (タイトル+年)
+    if (Array.isArray(c.topPapers) && c.topPapers.length > 0) {
+      const papHdr = document.createElement('div');
+      papHdr.className = 'trarxiv-author-cand-papers-hdr';
+      papHdr.textContent = '代表論文:';
+      block.appendChild(papHdr);
+      const ul = document.createElement('ul');
+      ul.className = 'trarxiv-author-cand-papers';
+      for (const p of c.topPapers.slice(0, 5)) {
+        const li = document.createElement('li');
+        const meta = [];
+        if (p.year) meta.push(p.year);
+        if (p.venue) meta.push(p.venue);
+        li.textContent = `${p.title ?? '(no title)'} ${meta.length ? `(${meta.join(', ')})` : ''}`;
+        ul.appendChild(li);
+      }
+      block.appendChild(ul);
+    }
+
+    // ── アクション行: 詳しく見る / ✓ / ✗ ──
+    if (!confirmed) {
+      const actions = document.createElement('div');
+      actions.className = 'trarxiv-author-actions';
+
+      // 詳しく見る (LLM 分析)
+      if (c.authorId) {
+        const analyzeBtn = document.createElement('button');
+        analyzeBtn.type = 'button';
+        analyzeBtn.className = 'trarxiv-btn trarxiv-author-analyze';
+        analyzeBtn.textContent = '🧠 詳しく見る';
+        const analysisHolder = document.createElement('div');
+        analysisHolder.className = 'trarxiv-author-analysis-holder';
+        analyzeBtn.addEventListener('click', async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          await loadAuthorAnalysis(analysisHolder, analyzeBtn, c);
+        });
+        actions.appendChild(analyzeBtn);
+        block.appendChild(actions);
+        block.appendChild(analysisHolder);
+      } else {
+        block.appendChild(actions);
+      }
+
+      const confirmBtn = document.createElement('button');
+      confirmBtn.type = 'button';
+      confirmBtn.className = 'trarxiv-btn trarxiv-author-confirm';
+      confirmBtn.textContent = '✓ この人';
+      confirmBtn.title = 'この候補で確定 (次回以降この人だけ表示)';
+      confirmBtn.addEventListener('click', async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        await sendMessage({
+          action: 'authorChoice',
+          paperId: ctx.paperId,
+          authorName: ctx.authorName,
+          action: 'confirm',
+          candidate: c,
+        });
+        // 確定したのでカードを再描画 (確定状態へ)
+        renderAuthorCard(card, {
+          source: 'semantic-scholar',
+          candidates: [c],
+          confirmed: true,
+        }, ctx);
+      });
+      actions.appendChild(confirmBtn);
+
+      const dismissBtn = document.createElement('button');
+      dismissBtn.type = 'button';
+      dismissBtn.className = 'trarxiv-btn trarxiv-author-dismiss';
+      dismissBtn.textContent = '✗';
+      dismissBtn.title = 'この候補を一覧から外す';
+      dismissBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        block.style.display = 'none';
+      });
+      actions.appendChild(dismissBtn);
+    }
+
+    card.appendChild(block);
+  });
+
+  // ── フッター ──
   const note = document.createElement('div');
   note.className = 'trarxiv-author-note';
   const noteSpan = document.createElement('span');
@@ -1784,6 +1892,64 @@ function renderAuthorCard(card, result) {
     note.appendChild(badge);
   }
   card.appendChild(note);
+}
+
+async function loadAuthorAnalysis(holder, btn, candidate) {
+  if (holder.dataset.state === 'loading' || holder.dataset.state === 'done') return;
+  holder.dataset.state = 'loading';
+  btn.disabled = true;
+  btn.textContent = '🧠 分析中...';
+
+  try {
+    let result = await sendMessage({
+      action: 'authorAnalysis',
+      authorId: candidate.authorId,
+      authorName: candidate.name,
+      topPapers: candidate.topPapers,
+    });
+
+    if (result?.error === 'NEEDS_PASSWORD') {
+      try {
+        await ensureKeysUnlocked();
+        result = await sendMessage({
+          action: 'authorAnalysis',
+          authorId: candidate.authorId,
+          authorName: candidate.name,
+          topPapers: candidate.topPapers,
+        });
+      } catch {
+        btn.disabled = false;
+        btn.textContent = '🧠 詳しく見る';
+        holder.dataset.state = '';
+        return;
+      }
+    }
+
+    if (result?.error) throw new Error(result.error);
+
+    const analysisEl = document.createElement('div');
+    analysisEl.className = 'trarxiv-author-analysis';
+    analysisEl.textContent = result.analysis ?? '';
+    if (result.fromCache) {
+      const badge = document.createElement('span');
+      badge.className = 'trarxiv-cache-badge';
+      badge.textContent = 'キャッシュ';
+      analysisEl.appendChild(document.createTextNode(' '));
+      analysisEl.appendChild(badge);
+    }
+    holder.replaceChildren(analysisEl);
+    btn.textContent = '🧠 分析済';
+    btn.disabled = true;
+    holder.dataset.state = 'done';
+  } catch (err) {
+    const errEl = document.createElement('div');
+    errEl.className = 'trarxiv-author-analysis error';
+    errEl.textContent = `⚠ ${err.message}`;
+    holder.replaceChildren(errEl);
+    btn.disabled = false;
+    btn.textContent = '🧠 詳しく見る';
+    holder.dataset.state = '';
+  }
 }
 
 // ─── Figure analysis ─────────────────────────────────────────────────────────
