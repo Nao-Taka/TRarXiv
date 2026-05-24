@@ -86,6 +86,12 @@
 
         <!-- Anthropic -->
         <div class="provider-section" id="section-anthropic">
+          <div class="alert alert-warn" style="margin-bottom:16px">
+            ⚠ <strong>Anthropic は「ブラウザ直叩き」を非推奨としています。</strong><br>
+            この拡張は <code>anthropic-dangerous-direct-browser-access</code> ヘッダで API を呼び出していますが、これは公式に「本番運用には推奨しない」とされている経路です。<br>
+            ・APIキーは AES-256-GCM で暗号化されストレージ保存されますが、復号後はメモリ上に常駐します。<br>
+            ・将来的にこの経路が遮断される可能性があります。重要な用途では別プロバイダー (OpenAI / Gemini / OpenRouter) も併用してください。
+          </div>
           <div class="form-row">
             <label>
               APIキー
