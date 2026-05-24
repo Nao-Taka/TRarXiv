@@ -70,19 +70,19 @@ options/options.js    # 設定ページ
 
 ### v0.3.0 — Wider & Deeper
 
-| # | アクション | なぜ | 編集対象 |
-|---|---|---|---|
-| **A8** | arxiv.org/abs ページサポート (a: ar5iv ボタン HTML版なし時 / b: 論文ブリーフィング) | やや古い ArXiv 論文は HTML 版リンクがなく PDF 強制 = 翻訳不可。ar5iv 経由のボタンと abs ページでのブリーフィングを提供 | manifest.json / content.js (新プロバイダ + abs ページロジック) |
-| **A9** | T5 第1陣 (bioRxiv, medRxiv, PMC, OpenReview, ACL Anthology) | 対応サイトを増やす。動的解析でも一応動くが、よく使うサイトは静的設定で表現力・安定性を上げたい | content.js PROVIDERS / manifest.json |
-| **A10** | Semantic Scholar 著者検索 (**失敗時エラー明示**) | 現行の著者リサーチは LLM がタイトル等から幻覚を吐く。Web 検索ベースに置換 (失敗時はフォールバックせずエラー明示) | 新規 utils/semantic-scholar.js / background.js |
-| **A11** | 論文の位置づけ + 関連論文 + チャット強化 | 「次に読む論文」「全体の中での位置づけ」を出すことで論文を有機的に評価できるようにする | background.js / content.js / popup.js |
+| # | アクション | なぜ | 状態 | 編集対象 |
+|---|---|---|---|---|
+| **A8** | arxiv.org/abs ページサポート (a: ar5iv ボタン HTML版なし時 / b: 論文ブリーフィング) | やや古い ArXiv 論文は HTML 版リンクがなく PDF 強制 = 翻訳不可。ar5iv 経由のボタンと abs ページでのブリーフィングを提供 | ✅ 完了 | manifest.json / content.js |
+| **A9** | T5 第1陣 (bioRxiv, medRxiv, PMC, OpenReview, ACL Anthology) | 対応サイトを増やす。動的解析でも一応動くが、よく使うサイトは静的設定で表現力・安定性を上げたい | ⏳ 未着手 | content.js PROVIDERS / manifest.json |
+| **A10** | Semantic Scholar 著者検索 (**失敗時エラー明示**) | 現行の著者リサーチは LLM がタイトル等から幻覚を吐く。Web 検索ベースに置換 (失敗時はフォールバックせずエラー明示) | ✅ 完了 | 新規 utils/semantic-scholar.js / background.js / content.js |
+| **A11** | 論文の位置づけ + 関連論文 + チャット強化 | 「次に読む論文」「全体の中での位置づけ」を出すことで論文を有機的に評価できるようにする | ✅ 完了 | background.js / content.js / utils/semantic-scholar.js |
 
 ### v0.4.0 — Reading Companion
 
-| # | アクション | なぜ | 編集対象 |
-|---|---|---|---|
-| **A13** | T5 第2陣 (Nature, Cell, eLife, PLOS) | A9 と同じく対応サイト拡大 (動的より静的の方が表現力高い) | content.js PROVIDERS |
-| **A14** | インライン参考文献注釈 + ホバー詳細 | 参考文献にいちいち飛ぶのが面倒。和訳ペア直下に著者/タイトルを常時表示 + ホバーで abstract 要約を出す | content.js / background.js / utils/cache.js |
+| # | アクション | なぜ | 状態 | 編集対象 |
+|---|---|---|---|---|
+| **A13** | T5 第2陣 (Nature, Cell, eLife, PLOS) | A9 と同じく対応サイト拡大 (動的より静的の方が表現力高い) | ⏳ 未着手 | content.js PROVIDERS |
+| **A14** | インライン参考文献注釈 + ホバー詳細 | 参考文献にいちいち飛ぶのが面倒。和訳ペア直下に著者/タイトルを常時表示 + ホバーで abstract 要約を出す | ✅ 完了 | content.js / content.css / background.js / utils/semantic-scholar.js |
 
 ### 保留
 
