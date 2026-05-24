@@ -104,14 +104,12 @@ async function initSiteMode(tab) {
   const reanalyzeBtn = document.getElementById('btn-reanalyze-site');
 
   if (config) {
-    statusEl.innerHTML =
-      `<span class="site-status-badge site-status-ok">✓ 設定済み</span>` +
-      `<span class="site-status-conf">信頼度: ${config.confidence ?? '?'}</span>`;
+    setStatusBadge(statusEl, 'ok', '✓ 設定済み', config.confidence);
     analyzeBtn.style.display = 'none';
     reanalyzeBtn.style.display = '';
     showSiteConfig(config);
   } else {
-    statusEl.innerHTML = '<span class="site-status-badge site-status-none">未解析</span>';
+    setStatusBadge(statusEl, 'none', '未解析');
   }
 
   analyzeBtn.addEventListener('click', () => runSiteAnalysis(tab, hostname));
@@ -134,11 +132,24 @@ function showSiteConfig(config) {
 
   if (sels.length === 0) { resultEl.style.display = 'none'; return; }
 
-  resultEl.innerHTML = sels.map(([label, sel]) =>
-    `<div class="site-sel-row"><span class="site-sel-label">${label}</span><code class="site-sel-val">${sel}</code></div>`
-  ).join('');
+  resultEl.replaceChildren();
+  for (const [label, sel] of sels) {
+    const row = document.createElement('div');
+    row.className = 'site-sel-row';
+    const lab = document.createElement('span');
+    lab.className = 'site-sel-label';
+    lab.textContent = label;
+    const code = document.createElement('code');
+    code.className = 'site-sel-val';
+    code.textContent = sel;
+    row.append(lab, code);
+    resultEl.appendChild(row);
+  }
   if (config.note) {
-    resultEl.innerHTML += `<div class="site-note-text">${config.note}</div>`;
+    const note = document.createElement('div');
+    note.className = 'site-note-text';
+    note.textContent = config.note;
+    resultEl.appendChild(note);
   }
   resultEl.style.display = 'block';
 }
@@ -194,7 +205,7 @@ async function runSiteAnalysis(tab, hostname) {
       await onAnalysisSuccess(res.config, statusEl, resultEl, hostname);
     }
   } catch (err) {
-    statusEl.innerHTML = `<span class="site-status-badge site-status-err">⚠ エラー: ${err.message.slice(0, 60)}</span>`;
+    setStatusBadge(statusEl, 'err', `⚠ エラー: ${err.message.slice(0, 60)}`);
   } finally {
     progressEl.style.display = 'none';
     analyzeBtn.disabled   = false;
@@ -207,9 +218,7 @@ async function runSiteAnalysis(tab, hostname) {
 }
 
 async function onAnalysisSuccess(config, statusEl, resultEl, hostname) {
-  statusEl.innerHTML =
-    `<span class="site-status-badge site-status-ok">✓ 解析完了</span>` +
-    `<span class="site-status-conf">信頼度: ${config?.confidence ?? '?'}</span>`;
+  setStatusBadge(statusEl, 'ok', '✓ 解析完了', config?.confidence);
   if (config) {
     showSiteConfig(config);
     await showPostConfigUI(hostname, config);
@@ -309,9 +318,7 @@ function handleRefineSuccess(config, hostname, histEl, statusEl, history) {
   appendRefineMsg(histEl, 'assistant', msg);
   history.push({ role: 'assistant', content: msg });
   showSiteConfig(config);
-  statusEl.innerHTML =
-    `<span class="site-status-badge site-status-ok">✓ 修正済み</span>` +
-    `<span class="site-status-conf">信頼度: ${config.confidence ?? '?'}</span>`;
+  setStatusBadge(statusEl, 'ok', '✓ 修正済み', config.confidence);
   // Update the refine button's closure config reference
   document.getElementById('btn-refine-site').onclick = () => runRefinement(hostname, config);
 }
@@ -489,7 +496,7 @@ function showPopupUnlockModal() {
 
 function clearConversation() {
   conversationHistory = [];
-  document.getElementById('messages').innerHTML = '';
+  document.getElementById('messages').replaceChildren();
   if (paperContext) {
     appendMessage('assistant', `会話をリセットしました。「${truncate(paperContext.title, 50)}」について何でもご質問ください。`);
   }
@@ -515,10 +522,11 @@ function appendTyping() {
   const container = document.getElementById('messages');
   const el = document.createElement('div');
   el.className = 'msg msg-assistant';
-  el.innerHTML =
-    '<span class="typing-dot"></span>' +
-    '<span class="typing-dot"></span>' +
-    '<span class="typing-dot"></span>';
+  for (let i = 0; i < 3; i++) {
+    const dot = document.createElement('span');
+    dot.className = 'typing-dot';
+    el.appendChild(dot);
+  }
   container.appendChild(el);
   container.scrollTop = container.scrollHeight;
   return el;
@@ -526,6 +534,20 @@ function appendTyping() {
 
 function truncate(str, n) {
   return str && str.length > n ? str.slice(0, n) + '…' : (str ?? '');
+}
+
+function setStatusBadge(container, type, label, confidence) {
+  container.replaceChildren();
+  const badge = document.createElement('span');
+  badge.className = `site-status-badge site-status-${type}`;
+  badge.textContent = label;
+  container.appendChild(badge);
+  if (confidence !== undefined && confidence !== null) {
+    const conf = document.createElement('span');
+    conf.className = 'site-status-conf';
+    conf.textContent = `信頼度: ${confidence ?? '?'}`;
+    container.appendChild(conf);
+  }
 }
 
 async function getStorageArea() {

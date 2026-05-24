@@ -849,28 +849,51 @@ async function clearLibrary() {
 async function renderSiteConfigs() {
   const container = document.getElementById('site-configs-list');
   if (!container) return;
-  container.innerHTML = '<div style="color:#94a3b8;padding:16px 0">読み込み中…</div>';
+  setLoadingPlaceholder(container, '読み込み中…');
 
   const configs = await chrome.runtime.sendMessage({ action: 'getAllSiteConfigs' });
   if (!configs || configs.length === 0) {
-    container.innerHTML = '<div style="color:#94a3b8;padding:16px 0">登録済みサイトはありません。ポップアップから未対応サイトを解析できます。</div>';
+    setLoadingPlaceholder(container, '登録済みサイトはありません。ポップアップから未対応サイトを解析できます。');
     return;
   }
 
-  container.innerHTML = configs.map(c => `
-    <div class="library-item">
-      <div class="library-item-header">
-        <span class="library-title">${escHtml(c.hostname)}</span>
-        <span class="library-meta">${c.savedAt ? new Date(c.savedAt).toLocaleDateString('ja-JP') : ''} • 信頼度: ${c.confidence ?? '?'}</span>
-      </div>
-      <div style="font-size:11.5px;color:#64748b;margin:4px 0">
-        セクション: <code>${escHtml(c.sectionSel ?? '')}</code> 　段落: <code>${escHtml(c.paragraphSel ?? '')}</code>
-      </div>
-      <div class="library-actions">
-        <button class="btn btn-danger btn-sm" data-hostname="${escHtml(c.hostname)}">削除</button>
-      </div>
-    </div>
-  `).join('');
+  container.replaceChildren();
+  for (const c of configs) {
+    const item = document.createElement('div');
+    item.className = 'library-item';
+
+    const header = document.createElement('div');
+    header.className = 'library-item-header';
+    const titleSpan = document.createElement('span');
+    titleSpan.className = 'library-title';
+    titleSpan.textContent = c.hostname ?? '';
+    const metaSpan = document.createElement('span');
+    metaSpan.className = 'library-meta';
+    const dateStr = c.savedAt ? new Date(c.savedAt).toLocaleDateString('ja-JP') : '';
+    metaSpan.textContent = `${dateStr} • 信頼度: ${c.confidence ?? '?'}`;
+    header.append(titleSpan, metaSpan);
+
+    const selRow = document.createElement('div');
+    selRow.style.cssText = 'font-size:11.5px;color:#64748b;margin:4px 0';
+    selRow.append('セクション: ');
+    const secCode = document.createElement('code');
+    secCode.textContent = c.sectionSel ?? '';
+    selRow.append(secCode, ' 　段落: ');
+    const paraCode = document.createElement('code');
+    paraCode.textContent = c.paragraphSel ?? '';
+    selRow.append(paraCode);
+
+    const actions = document.createElement('div');
+    actions.className = 'library-actions';
+    const delBtn = document.createElement('button');
+    delBtn.className = 'btn btn-danger btn-sm';
+    delBtn.textContent = '削除';
+    delBtn.dataset.hostname = c.hostname ?? '';
+    actions.appendChild(delBtn);
+
+    item.append(header, selRow, actions);
+    container.appendChild(item);
+  }
 
   container.querySelectorAll('[data-hostname]').forEach(btn => {
     btn.addEventListener('click', async () => {
@@ -879,6 +902,14 @@ async function renderSiteConfigs() {
       renderSiteConfigs();
     });
   });
+}
+
+function setLoadingPlaceholder(container, text) {
+  container.replaceChildren();
+  const div = document.createElement('div');
+  div.style.cssText = 'color:#94a3b8;padding:16px 0';
+  div.textContent = text;
+  container.appendChild(div);
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

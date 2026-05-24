@@ -116,22 +116,44 @@ function showUnlockModal() {
   return new Promise((resolve, reject) => {
     const overlay = document.createElement('div');
     overlay.className = 'trarxiv-unlock-overlay';
-    overlay.innerHTML = `
-      <div class="trarxiv-unlock-box">
-        <div class="trarxiv-unlock-title">&#128272; TrArXiv — APIキー解除</div>
-        <p class="trarxiv-unlock-desc">APIキーが暗号化されています。<br>設定時に登録したパスワードを入力してください。</p>
-        <input type="password" class="trarxiv-unlock-input" placeholder="パスワード" autocomplete="off">
-        <div class="trarxiv-unlock-actions">
-          <button class="trarxiv-unlock-ok">解除</button>
-          <button class="trarxiv-unlock-cancel">キャンセル</button>
-        </div>
-      </div>
-    `;
+
+    const box = document.createElement('div');
+    box.className = 'trarxiv-unlock-box';
+
+    const title = document.createElement('div');
+    title.className = 'trarxiv-unlock-title';
+    title.textContent = '\u{1F512} TrArXiv — APIキー解除';
+
+    const desc = document.createElement('p');
+    desc.className = 'trarxiv-unlock-desc';
+    desc.append(
+      'APIキーが暗号化されています。',
+      document.createElement('br'),
+      '設定時に登録したパスワードを入力してください。'
+    );
+
+    const input = document.createElement('input');
+    input.type = 'password';
+    input.className = 'trarxiv-unlock-input';
+    input.placeholder = 'パスワード';
+    input.autocomplete = 'off';
+
+    const actions = document.createElement('div');
+    actions.className = 'trarxiv-unlock-actions';
+    const okBtnEl = document.createElement('button');
+    okBtnEl.className = 'trarxiv-unlock-ok';
+    okBtnEl.textContent = '解除';
+    const cancelBtnEl = document.createElement('button');
+    cancelBtnEl.className = 'trarxiv-unlock-cancel';
+    cancelBtnEl.textContent = 'キャンセル';
+    actions.append(okBtnEl, cancelBtnEl);
+
+    box.append(title, desc, input, actions);
+    overlay.appendChild(box);
     document.body.appendChild(overlay);
 
-    const input     = overlay.querySelector('.trarxiv-unlock-input');
-    const okBtn     = overlay.querySelector('.trarxiv-unlock-ok');
-    const cancelBtn = overlay.querySelector('.trarxiv-unlock-cancel');
+    const okBtn     = okBtnEl;
+    const cancelBtn = cancelBtnEl;
 
     input.focus();
 
@@ -450,9 +472,17 @@ function renderProgressBtn(btn, { done, total, rate }, elapsedMs) {
     label = `${done}/${total}段落 ${elapsedS}s`;
   }
 
-  btn.innerHTML =
-    `<span class="trarxiv-spinner"></span>` +
-    `<span class="trarxiv-progress-label">${label}</span>`;
+  renderSpinnerLabel(btn, label);
+}
+
+function renderSpinnerLabel(btn, label) {
+  btn.replaceChildren();
+  const spin = document.createElement('span');
+  spin.className = 'trarxiv-spinner';
+  const lab = document.createElement('span');
+  lab.className = 'trarxiv-progress-label';
+  lab.textContent = label;
+  btn.append(spin, lab);
 }
 
 // ─── Explain ──────────────────────────────────────────────────────────────────
@@ -468,12 +498,12 @@ async function runExplain(section, paperId, paperTitle, btn) {
   // Show generating state
   progressHandlers.set(section.id, ({ phase }) => {
     if (phase === 'generating') {
-      btn.innerHTML = `<span class="trarxiv-spinner"></span><span class="trarxiv-progress-label">解説生成中...</span>`;
+      renderSpinnerLabel(btn, '解説生成中...');
     }
   });
 
   btn.disabled = true;
-  btn.innerHTML = `<span class="trarxiv-spinner"></span><span class="trarxiv-progress-label">0s</span>`;
+  renderSpinnerLabel(btn, '0s');
 
   const ticker = setInterval(() => {
     const el = btn.querySelector('.trarxiv-progress-label');
@@ -831,7 +861,7 @@ async function runPaperBriefing(paperId, paperTitle, provider, btn, card) {
   const abstract = provider.getAbstract?.() ?? '';
 
   btn.disabled = true;
-  btn.innerHTML = '<span class="trarxiv-spinner"></span><span class="trarxiv-progress-label">分析中...</span>';
+  renderSpinnerLabel(btn, '分析中...');
   const startTime = Date.now();
   const ticker = setInterval(() => {
     const el = btn.querySelector('.trarxiv-progress-label');
@@ -883,7 +913,7 @@ async function runPaperBriefing(paperId, paperTitle, provider, btn, card) {
 }
 
 function renderBriefingCard(card, text) {
-  card.innerHTML = '';
+  card.replaceChildren();
   // Parse labeled sections: 🎯一言で / 🔬手法 / ✨新規性 / 📊比較 / ⚠️課題
   const LABELS = ['🎯一言で', '🔬手法', '✨新規性', '📊比較', '⚠️課題'];
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
@@ -979,7 +1009,10 @@ async function runAuthorResearch(authorName, paperId, paperTitle, btn, card) {
   }
 
   btn.disabled = true;
-  btn.innerHTML = '<span class="trarxiv-spinner"></span>';
+  btn.replaceChildren();
+  const spinEl = document.createElement('span');
+  spinEl.className = 'trarxiv-spinner';
+  btn.appendChild(spinEl);
 
   try {
     const msg = { action: 'authorResearch', authorName, paperTitle };
@@ -998,7 +1031,7 @@ async function runAuthorResearch(authorName, paperId, paperTitle, btn, card) {
 
     if (result.error) throw new Error(result.error);
 
-    card.innerHTML = '';
+    card.replaceChildren();
     const infoEl = document.createElement('span');
     infoEl.textContent = result.info;
     card.appendChild(infoEl);
@@ -1022,10 +1055,18 @@ async function runAuthorResearch(authorName, paperId, paperTitle, btn, card) {
   } catch (err) {
     btn.disabled = false;
     btn.textContent = '🔍 調べる';
-    card.innerHTML = `<span style="color:#dc2626">⚠ ${err.message}</span>`;
-    card.style.display = '';
-    setTimeout(() => { card.style.display = 'none'; card.innerHTML = ''; }, 6000);
+    renderErrorCard(card, err.message);
+    setTimeout(() => { card.style.display = 'none'; card.replaceChildren(); }, 6000);
   }
+}
+
+function renderErrorCard(container, message) {
+  container.replaceChildren();
+  const err = document.createElement('span');
+  err.style.color = '#dc2626';
+  err.textContent = `⚠ ${message}`;
+  container.appendChild(err);
+  container.style.display = '';
 }
 
 // ─── Figure analysis ─────────────────────────────────────────────────────────
@@ -1071,7 +1112,10 @@ async function runAnalyzeFigure(fig, imgEl, paperId, paperTitle, btn, resultEl) 
   const imageUrl = imgEl.src;
 
   btn.disabled = true;
-  btn.innerHTML = '<span class="trarxiv-spinner"></span> 解析中…';
+  btn.replaceChildren();
+  const figSpin = document.createElement('span');
+  figSpin.className = 'trarxiv-spinner';
+  btn.append(figSpin, ' 解析中…');
 
   try {
     const msg = { action: 'analyzeImage', imageUrl, caption, paperTitle, paperId };
@@ -1090,7 +1134,7 @@ async function runAnalyzeFigure(fig, imgEl, paperId, paperTitle, btn, resultEl) 
 
     if (result.error) throw new Error(result.error);
 
-    resultEl.innerHTML = '';
+    resultEl.replaceChildren();
     const label = document.createElement('div');
     label.className = 'trarxiv-fig-label';
     label.textContent = '🔬 AI解析';
@@ -1105,9 +1149,8 @@ async function runAnalyzeFigure(fig, imgEl, paperId, paperTitle, btn, resultEl) 
     btn.disabled = false;
     btn.textContent = '✕ 解析を閉じる';
   } catch (err) {
-    resultEl.innerHTML = `<span style="color:#dc2626">⚠ ${err.message}</span>`;
-    resultEl.style.display = '';
-    setTimeout(() => { resultEl.style.display = 'none'; resultEl.innerHTML = ''; }, 6000);
+    renderErrorCard(resultEl, err.message);
+    setTimeout(() => { resultEl.style.display = 'none'; resultEl.replaceChildren(); }, 6000);
     btn.disabled = false;
     btn.textContent = '図を解析';
   }
