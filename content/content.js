@@ -1522,29 +1522,87 @@ function buildPositioningSection({ label, body }) {
 }
 
 // ─── Author Research ──────────────────────────────────────────────────────────
+// `.ltx_personname` の中身を「個別著者名」のリストに分解する。
+// arxiv.org/html では 1 author = 1 personname のことが多いが、ar5iv では
+// 全著者が 1 つの personname に詰め込まれているケースがある。
+// 同時に email / 所属 / 一行ブレイクも除外する。
+function extractAuthorNames(nameEl) {
+  const clone = nameEl.cloneNode(true);
+  // 改行 / typewriter (email) / role_address は除去
+  clone.querySelectorAll('br').forEach(br => br.replaceWith('\n'));
+  clone.querySelectorAll('.ltx_font_typewriter, .ltx_role_address, .ltx_role_email').forEach(el => el.remove());
+
+  const text = clone.textContent;
+  // 改行で分割 → 各行を「2つ以上のスペース」「カンマ」「セミコロン」「and」で分割
+  const candidates = text.split(/\n+/)
+    .flatMap(line => line.split(/\s{2,}|,|;|\band\b/i))
+    .map(s => s.trim())
+    .filter(Boolean);
+
+  // 著者名らしいものに絞る (簡易ヒューリスティック):
+  // - 大文字を含む / 60文字以下 / 1〜5単語 / @ を含まない
+  // - 所属を示す典型語を含まない
+  return candidates.filter(s => {
+    if (!/[A-Z]/.test(s)) return false;
+    if (s.length > 60) return false;
+    if (s.includes('@')) return false;
+    if (s.split(/\s+/).length > 5) return false;
+    if (/\b(research|university|institute|laboratory|department|inc|ltd|corp|team|group|brain|google|microsoft|meta|openai|deepmind)\b/i.test(s)) return false;
+    return true;
+  });
+}
+
 function injectAuthorButtons(paperId, paperTitle) {
   document.querySelectorAll('.ltx_personname').forEach(nameEl => {
-    if (nameEl.querySelector('.trarxiv-author-btn')) return;
-    const authorName = nameEl.textContent.trim();
-    if (!authorName) return;
+    if (nameEl.dataset.trarxivAuthorInjected === '1') return;
+    nameEl.dataset.trarxivAuthorInjected = '1';
 
-    const btn = document.createElement('button');
-    btn.className = 'trarxiv-btn trarxiv-author-btn';
-    btn.textContent = '🔍 調べる';
-    nameEl.appendChild(btn);
+    const names = extractAuthorNames(nameEl);
+    if (names.length === 0) return;
 
-    // Card placed after the author's parent container
-    const card = document.createElement('div');
-    card.className = 'trarxiv-author-card';
-    card.style.display = 'none';
-
-    // Insert card after the closest .ltx_role or .ltx_creator block, or after nameEl itself
+    // ボタン群は personname の **外** (closest .ltx_creator / .ltx_role の後) に置く。
+    // personname 内部に置くと、arxiv 側で当該 span のクリック領域が死んでいる場合に
+    // ボタンも反応しなくなる現象がある (MathJax/select オーバーレイ等)。
     const anchor = nameEl.closest('.ltx_creator, .ltx_role') ?? nameEl;
-    anchor.after(card);
 
-    btn.addEventListener('click', () => runAuthorResearch(
-      authorName, paperId, paperTitle, btn, card
-    ));
+    const wrap = document.createElement('div');
+    wrap.className = 'trarxiv-author-btns';
+
+    for (const authorName of names) {
+      const item = document.createElement('span');
+      item.className = 'trarxiv-author-item';
+
+      const label = document.createElement('span');
+      label.className = 'trarxiv-author-name';
+      label.textContent = authorName;
+
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'trarxiv-btn trarxiv-author-btn';
+      btn.textContent = '🔍';
+      btn.title = `${authorName} を調べる`;
+
+      const card = document.createElement('div');
+      card.className = 'trarxiv-author-card';
+      card.style.display = 'none';
+
+      item.append(label, btn);
+      wrap.append(item);
+
+      // card は wrap の直後にではなく、各 item の下にぶら下げる
+      const cardWrap = document.createElement('div');
+      cardWrap.className = 'trarxiv-author-card-wrap';
+      cardWrap.appendChild(card);
+      wrap.appendChild(cardWrap);
+
+      btn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        runAuthorResearch(authorName, paperId, paperTitle, btn, card);
+      });
+    }
+
+    anchor.after(wrap);
   });
 }
 
