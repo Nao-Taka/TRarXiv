@@ -7,6 +7,34 @@
 // ─── Provider Registry ────────────────────────────────────────────────────────
 const PROVIDERS = [
   {
+    name: 'arxiv-abs',
+    isAbsPage: true,
+    canHandle: (url) => /arxiv\.org\/abs\//i.test(url),
+    getPaperId: (url) => {
+      const m = url.match(/arxiv\.org\/abs\/([^/?#]+)/i);
+      return m ? m[1].replace(/v\d+$/, '') : null;
+    },
+    getRawPaperId: (url) => {
+      // 元の (v付きの) ID を保持。HTML/ar5iv リンクで使う
+      const m = url.match(/arxiv\.org\/abs\/([^/?#]+)/i);
+      return m ? m[1] : null;
+    },
+    getPaperTitle: () => {
+      const el = document.querySelector('h1.title');
+      if (!el) return document.title;
+      return el.textContent.replace(/^\s*Title:\s*/i, '').trim();
+    },
+    getAbstract: () => {
+      const el = document.querySelector('blockquote.abstract');
+      return el ? el.textContent.replace(/^\s*Abstract:\s*/i, '').trim() : '';
+    },
+    hasHtmlVersion: () => {
+      // arxiv abs ページは HTML 版がある時に "HTML (experimental)" リンクを表示する
+      return !!document.querySelector('a[href*="/html/"]');
+    },
+    getSections: () => [],
+  },
+  {
     name: 'arxiv',
     canHandle: (url) => /arxiv\.org\/html\//i.test(url),
     getPaperId: (url) => {
@@ -342,6 +370,14 @@ function makeDynamicProvider(hostname, cfg) {
   // Register paper in library (fire-and-forget)
   sendMessage({ action: 'registerPaper', id: paperId, title: paperTitle, url: location.href }).catch(() => {});
 
+  // ── arxiv.org/abs/ ページ: HTML/ar5iv 誘導 + 論文ブリーフィング ──
+  if (provider.isAbsPage) {
+    injectAbsLinkBtn(paperId, provider);
+    injectPaperBriefingBtn(paperId, paperTitle, provider);
+    setupContextListener(provider, paperId, paperTitle, []);
+    return;
+  }
+
   const sections = provider.getSections();
   if (sections.length === 0) return;
   sections.forEach(section => injectButtons(section, paperId, paperTitle));
@@ -351,6 +387,39 @@ function makeDynamicProvider(hostname, cfg) {
   injectFigureButtons(paperId, paperTitle);
   setupContextListener(provider, paperId, paperTitle, sections);
 })();
+
+// ─── arxiv.org/abs/ — HTML or ar5iv link button ───────────────────────────────
+function injectAbsLinkBtn(paperId, provider) {
+  const titleEl = document.querySelector('h1.title');
+  if (!titleEl || titleEl.parentElement?.querySelector('.trarxiv-abs-link-wrap')) return;
+
+  const rawId  = provider.getRawPaperId?.(location.href) ?? paperId;
+  const hasHtml = provider.hasHtmlVersion?.() ?? false;
+
+  const wrap = document.createElement('div');
+  wrap.className = 'trarxiv-abs-link-wrap';
+
+  const link = document.createElement('a');
+  link.className = 'trarxiv-btn trarxiv-abs-link-btn';
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  if (hasHtml) {
+    link.href = `https://arxiv.org/html/${rawId}`;
+    link.textContent = '📄 TRarXiv で読む (HTML版)';
+  } else {
+    link.href = `https://ar5iv.org/abs/${rawId}`;
+    link.textContent = '📑 ar5iv 経由で読む (HTML版なし)';
+    const note = document.createElement('span');
+    note.className = 'trarxiv-abs-link-note';
+    note.textContent = ' ※ ar5iv は arXiv の LaTeX を HTML 変換するサードパーティサービス';
+    wrap.appendChild(link);
+    wrap.appendChild(note);
+    titleEl.after(wrap);
+    return;
+  }
+  wrap.appendChild(link);
+  titleEl.after(wrap);
+}
 
 // ─── Button injection ─────────────────────────────────────────────────────────
 function injectButtons(section, paperId, paperTitle) {
@@ -909,8 +978,15 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 // ─── Paper Briefing ───────────────────────────────────────────────────────────
 function injectPaperBriefingBtn(paperId, paperTitle, provider) {
-  const titleEl = document.querySelector('h1.ltx_title.ltx_title_document, .ltx_document > h1');
-  if (!titleEl || titleEl.querySelector('.trarxiv-briefing-btn')) return;
+  // arXiv html (.ltx_*), arXiv abs (h1.title), 動的サイト (汎用 h1) すべてカバー
+  const titleEl = document.querySelector(
+    'h1.ltx_title.ltx_title_document, .ltx_document > h1, h1.title'
+  );
+  if (!titleEl) return;
+  // wrap が既に挿入されていたら二重注入を防ぐ
+  let cursor = titleEl.nextElementSibling;
+  while (cursor && cursor.classList?.contains('trarxiv-abs-link-wrap')) cursor = cursor.nextElementSibling;
+  if (cursor?.classList?.contains('trarxiv-briefing-wrap')) return;
 
   const btn = document.createElement('button');
   btn.className = 'trarxiv-btn trarxiv-briefing-btn';

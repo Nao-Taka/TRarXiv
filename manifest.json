@@ -37,7 +37,7 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://arxiv.org/html/*"],
+      "matches": ["https://arxiv.org/html/*", "https://arxiv.org/abs/*"],
       "js": ["content/content.js"],
       "css": ["content/content.css"],
       "run_at": "document_idle"
