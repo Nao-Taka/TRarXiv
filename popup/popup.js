@@ -49,7 +49,12 @@ async function detectPage() {
     return;
   }
 
-  if (/arxiv\.org\/html\//i.test(tab.url)) {
+  // TrArXiv 対応サイト (content_script の matches に対応):
+  // arxiv.org/html, arxiv.org/abs, ar5iv.labs.arxiv.org, ar5iv.org
+  const isTrArxivSupported =
+    /arxiv\.org\/(html|abs)\//i.test(tab.url) ||
+    /ar5iv\.(labs\.arxiv\.org|org)\//i.test(tab.url);
+  if (isTrArxivSupported) {
     await initChatMode(tab);
   } else {
     await initSiteMode(tab);

@@ -224,6 +224,24 @@ chrome.runtime.onMessage.addListener((msg) => {
   // Do NOT return true — no async response needed
 });
 
+// getPaperContext リスナーはここで **同期登録** する。
+// init() は async で先頭に await があるため、リスナー登録を関数内で遅延すると
+// popup から chrome.tabs.sendMessage を投げたタイミングによっては
+// "Receiving end does not exist" が出る (競合)。
+// content は読み込まれた瞬間にこのリスナーを持ち、init() が完了後に
+// _paperContextSupplier をセットして実データを返せるようにする。
+let _paperContextSupplier = null;
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg.action === 'getPaperContext') {
+    try {
+      sendResponse(_paperContextSupplier ? _paperContextSupplier() : null);
+    } catch {
+      sendResponse(null);
+    }
+    return true;
+  }
+});
+
 // ─── UI preferences ───────────────────────────────────────────────────────────
 let collapseEnglishDefault = false;
 
@@ -382,6 +400,11 @@ function makeDynamicProvider(hostname, cfg) {
   }
 
   const sections = provider.getSections();
+
+  // popup からの getPaperContext に応答できるように、sections の有無に関係なく
+  // 先に supplier をセットする (空 sections でも abstract は返せる)
+  setupContextListener(provider, paperId, paperTitle, sections);
+
   if (sections.length === 0) return;
 
   // A14: 参考文献マップを一度だけ構築 (ページ内で共有)
@@ -393,7 +416,6 @@ function makeDynamicProvider(hostname, cfg) {
   injectPositioningBtn(paperId, paperTitle, provider);
   injectAuthorButtons(paperId, paperTitle);
   injectFigureButtons(paperId, paperTitle);
-  setupContextListener(provider, paperId, paperTitle, sections);
 })();
 
 // ─── arxiv.org/abs/ — HTML or ar5iv link button ───────────────────────────────
@@ -2049,21 +2071,18 @@ async function runAnalyzeFigure(fig, imgEl, paperId, paperTitle, btn, resultEl) 
 }
 
 // ─── Chat context listener ────────────────────────────────────────────────────
+// 実体のリスナーはモジュール上部で同期登録済み。ここでは init() 完了時に
+// "context を返す関数" をセットするだけ (競合回避)。
 function setupContextListener(provider, paperId, paperTitle, sections) {
-  chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-    if (msg.action === 'getPaperContext') {
-      sendResponse({
-        paperId, title: paperTitle,
-        abstract: provider.getAbstract?.() ?? '',
-        sections: sections.map(s => ({
-          id: s.id, title: s.title,
-          text: s.paragraphEls.map(extractText).join('\n')
-            .replace(/⟦MATH_\d+⟧/g, '[数式]')
-    .replace(/⟦REF:[^⟧]+⟧/g, '[REF]')
-            .slice(0, 1000),
-        })),
-      });
-      return true;
-    }
+  _paperContextSupplier = () => ({
+    paperId, title: paperTitle,
+    abstract: provider.getAbstract?.() ?? '',
+    sections: sections.map(s => ({
+      id: s.id, title: s.title,
+      text: s.paragraphEls.map(extractText).join('\n')
+        .replace(/⟦MATH_\d+⟧/g, '[数式]')
+        .replace(/⟦REF:[^⟧]+⟧/g, '[REF]')
+        .slice(0, 1000),
+    })),
   });
 }
