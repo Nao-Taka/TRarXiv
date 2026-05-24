@@ -550,7 +550,7 @@ async function runTranslate(section, paperId, btn) {
     btn.textContent = '再翻訳';
 
     if (result.fromCache) {
-      appendBadge(btn, 'キャッシュ', 'trarxiv-cache-badge');
+      appendBadge(btn, '💾 保存済み', 'trarxiv-cache-badge');
     } else {
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       appendBadge(btn, `${elapsed}s`, 'trarxiv-time-badge');
@@ -695,7 +695,7 @@ async function runExplain(section, paperId, paperTitle, btn) {
     btn.textContent = '再解説';
 
     if (result.fromCache) {
-      appendBadge(btn, 'キャッシュ', 'trarxiv-cache-badge');
+      appendBadge(btn, '💾 保存済み', 'trarxiv-cache-badge');
     } else {
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       appendBadge(btn, `${elapsed}s`, 'trarxiv-time-badge');
@@ -1178,7 +1178,7 @@ async function runPaperBriefing(paperId, paperTitle, provider, btn, card) {
     btn.textContent = '✕ ブリーフィングを閉じる';
 
     if (result.fromCache) {
-      appendBriefingBadge(btn, 'キャッシュ', 'trarxiv-cache-badge');
+      appendBriefingBadge(btn, '💾 保存済み', 'trarxiv-cache-badge');
     } else {
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       appendBriefingBadge(btn, `${elapsed}s`, 'trarxiv-time-badge');
@@ -1326,7 +1326,7 @@ async function runPaperPositioning(paperId, paperTitle, provider, btn, card) {
     btn.textContent = '✕ 位置づけを閉じる';
 
     if (result.fromCache) {
-      appendBriefingBadge(btn, 'キャッシュ', 'trarxiv-cache-badge');
+      appendBriefingBadge(btn, '💾 保存済み', 'trarxiv-cache-badge');
     } else {
       const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       appendBriefingBadge(btn, `${elapsed}s`, 'trarxiv-time-badge');
@@ -1919,7 +1919,7 @@ function renderAuthorCard(card, result, ctx) {
   if (result.fromCache) {
     const badge = document.createElement('span');
     badge.className = 'trarxiv-cache-badge';
-    badge.textContent = 'キャッシュ';
+    badge.textContent = '💾 保存済み';
     note.appendChild(badge);
   }
   card.appendChild(note);
@@ -1964,7 +1964,7 @@ async function loadAuthorAnalysis(holder, btn, candidate) {
     if (result.fromCache) {
       const badge = document.createElement('span');
       badge.className = 'trarxiv-cache-badge';
-      badge.textContent = 'キャッシュ';
+      badge.textContent = '💾 保存済み';
       analysisEl.appendChild(document.createTextNode(' '));
       analysisEl.appendChild(badge);
     }
